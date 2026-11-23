@@ -1,0 +1,13 @@
+{
+  "appId": "studio.ai.horror404.app",
+  "appName": "伪人入侵",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "android": {
+    "backgroundColor": "#05070d",
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false,
+    "appendUserAgent": "404Horror-Android/1.0"
+  }
+}

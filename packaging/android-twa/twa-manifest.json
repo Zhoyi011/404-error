@@ -1,0 +1,38 @@
+{
+  "packageId": "studio.ai.horror404.twa",
+  "host": "404-horror.ai.studio",
+  "name": "伪人入侵 - 心理恐怖桌面解谜",
+  "launcherName": "伪人入侵",
+  "display": "standalone",
+  "themeColor": "#070b14",
+  "themeColorDark": "#070b14",
+  "navigationColor": "#05070d",
+  "navigationColorDark": "#05070d",
+  "navigationDividerColor": "#0f172a",
+  "navigationDividerColorDark": "#0f172a",
+  "backgroundColor": "#05070d",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://404-horror.ai.studio/pwa-512x512.png",
+  "maskableIconUrl": "https://404-horror.ai.studio/pwa-maskable-512x512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "horror404"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://404-horror.ai.studio/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": "true",
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "orientation": "default",
+  "fingerprints": []
+}

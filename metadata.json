@@ -1,0 +1,6 @@
+{
+  "name": "伪人入侵",
+  "description": "心理恐怖风格虚拟桌面解谜游戏。在仿 Windows 11 与 iOS 移动端的虚拟系统中调查诡异招聘与异常事件，管理理智与系统防护，收集全部 30 个结局。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

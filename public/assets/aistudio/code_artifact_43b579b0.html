@@ -1,0 +1,3915 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
+    <title>伪人入侵 - 恐怖虚拟桌面</title>
+    <style>
+        /* ========== 全局样式与设计变量 ========== */
+        :root {
+            --accent-color: #ffaa66;
+            --bg-desktop: linear-gradient(135deg, #2d4a6e 0%, #1a3a4a 100%);
+            --bg-body: radial-gradient(circle at center, #1a2a3a 0%, #0a121c 100%);
+            --text-main: #eef4ff;
+            --panel-bg: rgba(15, 20, 26, 0.78);
+            --win-bg: #1e2a2a;
+            --horror-intensity: 0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* 可选中文字的例外区域 */
+        .window-content, 
+        .diary-entry, 
+        .job-item, 
+        .email-item, 
+        .search-input, 
+        .quest-container,
+        #notepadContent,
+        #browserContent,
+        #emailContent,
+        .chat-message,
+        .news-alert,
+        .setting-section,
+        .security-status,
+        .ending-content,
+        .settings-card,
+        .about-content,
+        .app-list-item,
+        .recommended-item,
+        .setting-row,
+        .card-content,
+        textarea,
+        input {
+            user-select: text !important;
+            -webkit-user-select: text !important;
+        }
+
+        body {
+            background: var(--bg-body);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Consolas', monospace;
+            position: relative;
+            padding: 0;
+            overflow: hidden;
+            transition: background 0.4s ease;
+        }
+
+        /* ========== 恐怖氛围覆盖层 (CRT扫描线 & 暗角 & 故障) ========== */
+        .horror-vignette {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 9990;
+            background: radial-gradient(circle at center, transparent 55%, rgba(80, 0, 0, calc(var(--horror-intensity) * 0.65)) 100%);
+            transition: background 0.5s ease;
+        }
+
+        .crt-scanlines {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 9991;
+            background: linear-gradient(
+                rgba(18, 16, 16, 0) 50%, 
+                rgba(0, 0, 0, 0.22) 50%
+            ), linear-gradient(
+                90deg,
+                rgba(255, 0, 0, 0.03),
+                rgba(0, 255, 0, 0.01),
+                rgba(0, 0, 255, 0.03)
+            );
+            background-size: 100% 3px, 6px 100%;
+            opacity: calc(0.25 + var(--horror-intensity) * 0.65);
+        }
+
+        .desktop-glitch {
+            animation: screenGlitch 0.25s infinite;
+        }
+
+        @keyframes screenGlitch {
+            0% { transform: translate(0, 0); filter: hue-rotate(0deg); }
+            25% { transform: translate(-2px, 1px); filter: hue-rotate(15deg) contrast(1.1); }
+            50% { transform: translate(2px, -1px); filter: hue-rotate(-15deg); }
+            75% { transform: translate(-1px, -2px); filter: contrast(1.2); }
+            100% { transform: translate(0, 0); filter: hue-rotate(0deg); }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translate(0, 0); }
+            25% { transform: translate(-6px, 4px); }
+            50% { transform: translate(6px, -4px); }
+            75% { transform: translate(-4px, -4px); }
+        }
+
+        /* ========== 主桌面容器 ========== */
+        .desktop {
+            width: 100vw;
+            height: 100vh;
+            background: var(--bg-desktop);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.15);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: background 0.4s ease;
+        }
+
+        /* 桌面图标区 */
+        .icons-area {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            display: grid;
+            grid-template-columns: repeat(2, 86px);
+            gap: 16px;
+            z-index: 10;
+            max-width: calc(100% - 40px);
+            max-height: calc(100vh - 80px);
+            overflow-y: auto;
+        }
+
+        .desktop-icon {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 86px;
+            cursor: pointer;
+            background: rgba(0, 0, 0, 0.48);
+            backdrop-filter: blur(8px);
+            padding: 10px 6px;
+            border-radius: 12px;
+            color: var(--text-main);
+            transition: all 0.2s ease;
+            border: 1px solid rgba(255,255,255,0.18);
+            position: relative;
+        }
+
+        .desktop-icon:hover {
+            background: rgba(255,255,255,0.18);
+            transform: translateY(-2px);
+            border-color: var(--accent-color);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.35);
+        }
+
+        .desktop-icon.selected {
+            background: rgba(255, 170, 102, 0.22);
+            border-color: var(--accent-color);
+        }
+
+        .icon-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: #ff4444;
+            color: white;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 10px;
+            box-shadow: 0 2px 6px rgba(255,0,0,0.5);
+            animation: pulse 1.5s infinite;
+        }
+
+        .icon-img {
+            font-size: 32px;
+            filter: drop-shadow(2px 2px 3px rgba(0,0,0,0.6));
+        }
+
+        .icon-label {
+            font-size: 12px;
+            margin-top: 6px;
+            font-weight: 500;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+            text-align: center;
+        }
+
+        /* 右侧信息面板 */
+        .info-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 295px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 10;
+            max-height: calc(100vh - 80px);
+            overflow-y: auto;
+        }
+
+        .sanity-container, .quest-container, .network-container, .ending-progress-container {
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            padding: 12px 15px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.15);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+            transition: all 0.25s ease;
+        }
+
+        .sanity-container:hover, .quest-container:hover {
+            transform: translateX(-2px);
+        }
+
+        .sanity-container { border-left: 4px solid #ff5555; }
+        .quest-container { border-left: 4px solid var(--accent-color); }
+        .network-container { border-left: 4px solid #55aaff; cursor: pointer; }
+        .network-container:hover { background: rgba(25, 35, 45, 0.9); }
+        .ending-progress-container { border-left: 4px solid #ffaa44; cursor: pointer; }
+        .ending-progress-container:hover { background: rgba(25, 35, 45, 0.9); }
+
+        .ending-progress-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: var(--accent-color);
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .ending-progress-bar {
+            background: #232a2a;
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .ending-progress-fill {
+            background: linear-gradient(90deg, #ffaa44, #ff6644);
+            height: 100%;
+            transition: width 0.5s ease;
+        }
+
+        .ending-progress-text {
+            font-size: 11px;
+            color: #ffbb88;
+            margin-top: 5px;
+            text-align: right;
+        }
+
+        .network-status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: #eef4ff;
+            font-size: 13px;
+        }
+
+        .network-left-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .network-toggle-pill {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.12);
+            color: #aad4ff;
+        }
+
+        .network-offline .network-text { color: #ff7777; }
+        .network-offline .network-toggle-pill { background: rgba(255,80,80,0.25); color: #ffaaaa; }
+
+        .sanity-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .sanity-label, .quest-title {
+            font-weight: bold;
+            font-size: 13px;
+        }
+
+        .sanity-label { color: #ff9999; }
+        .quest-title { color: var(--accent-color); margin-bottom: 6px; }
+
+        .sanity-bar-bg {
+            background: #3a1515;
+            height: 10px;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .sanity-bar-fill {
+            background: linear-gradient(90deg, #ff4444, #ff8866);
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+
+        .sanity-percent {
+            color: #ffaaaa;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        #questText {
+            font-size: 13px;
+            color: #ffffff;
+            line-height: 1.5;
+        }
+
+        /* ========== Windows 11 风格任务栏 ========== */
+        .taskbar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 48px;
+            background: rgba(18, 22, 28, 0.88);
+            backdrop-filter: blur(22px);
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 12px;
+            z-index: 1000;
+        }
+
+        .taskbar-left, .taskbar-center, .taskbar-right {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .taskbar-left { flex: 1; }
+        .taskbar-center { flex: 1; justify-content: center; }
+        .taskbar-right { flex: 1; justify-content: flex-end; gap: 8px; }
+
+        .start-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .start-btn:hover { background: rgba(255, 255, 255, 0.12); }
+
+        .taskbar .search-box {
+            display: flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            padding: 4px 12px;
+            gap: 8px;
+            width: 170px;
+            height: 32px;
+            border: 1px solid rgba(255,255,255,0.08);
+            transition: all 0.2s ease;
+        }
+
+        .taskbar .search-box:focus-within {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: var(--accent-color);
+            width: 210px;
+        }
+
+        .taskbar .search-input {
+            background: transparent;
+            border: none;
+            color: #eef4ff;
+            font-size: 12px;
+            outline: none;
+            width: 100%;
+        }
+
+        .task-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 19px;
+            position: relative;
+        }
+
+        .task-icon:hover {
+            background: rgba(255, 255, 255, 0.12);
+            transform: translateY(-2px);
+        }
+
+        .task-icon.active {
+            background: rgba(255, 255, 255, 0.16);
+        }
+
+        .task-icon.active::after {
+            content: '';
+            position: absolute;
+            bottom: 3px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 16px;
+            height: 3px;
+            background: var(--accent-color);
+            border-radius: 2px;
+        }
+
+        .system-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: #eef4ff;
+            font-size: 15px;
+        }
+
+        .system-icon:hover { background: rgba(255, 255, 255, 0.12); }
+
+        .clock {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            justify-content: center;
+            padding: 0 8px;
+            cursor: pointer;
+            border-radius: 8px;
+            height: 36px;
+            color: #eef4ff;
+        }
+
+        .clock:hover { background: rgba(255, 255, 255, 0.12); }
+        .clock-time { font-size: 12px; font-weight: 600; line-height: 1.2; }
+        .clock-date { font-size: 10px; color: #bbb; line-height: 1.1; }
+
+        .show-desktop {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 36px;
+            border-left: 1px solid rgba(255,255,255,0.15);
+            cursor: pointer;
+        }
+        .show-desktop:hover { background: rgba(255,255,255,0.12); }
+
+        /* ========== 开始菜单 ========== */
+        .start-menu {
+            position: absolute;
+            bottom: 56px;
+            left: 12px;
+            width: 480px;
+            max-width: calc(100vw - 24px);
+            max-height: calc(100vh - 80px);
+            background: rgba(24, 28, 34, 0.96);
+            backdrop-filter: blur(28px);
+            border-radius: 16px;
+            box-shadow: 0 20px 45px rgba(0, 0, 0, 0.6);
+            z-index: 1001;
+            overflow: hidden;
+            animation: slideUp 0.22s ease;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            display: flex;
+            flex-direction: column;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .start-menu.hidden { display: none !important; }
+
+        .start-menu-header {
+            padding: 16px 20px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-avatar-large {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, #ffaa66, #ff7744);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .user-info-large { flex: 1; }
+        .user-name-large { font-size: 15px; font-weight: 600; color: #eef4ff; }
+        .user-email-large { font-size: 11px; color: #aaa; margin-top: 2px; }
+
+        .user-settings-btn {
+            width: 32px;
+            height: 32px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            cursor: pointer;
+            color: white;
+        }
+
+        .start-menu-search {
+            margin: 12px 20px;
+            display: flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 8px 12px;
+            gap: 8px;
+        }
+
+        .start-menu-search input {
+            background: transparent;
+            border: none;
+            color: #eef4ff;
+            font-size: 13px;
+            outline: none;
+            width: 100%;
+        }
+
+        .start-menu-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 20px 14px;
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #aaa;
+            margin: 14px 0 8px;
+        }
+
+        .apps-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+
+        .app-grid-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 6px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .app-grid-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .app-grid-icon { font-size: 26px; }
+        .app-grid-name { font-size: 11px; color: #eef4ff; text-align: center; }
+
+        .apps-list { display: flex; flex-direction: column; gap: 4px; }
+
+        .app-list-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .app-list-item:hover { background: rgba(255, 255, 255, 0.08); }
+        .app-list-icon { font-size: 18px; }
+        .app-list-name { flex: 1; font-size: 13px; color: #eef4ff; }
+        .app-list-shortcut { font-size: 11px; color: #888; }
+
+        .recommended-items { display: flex; flex-direction: column; gap: 8px; }
+
+        .recommended-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            cursor: pointer;
+        }
+
+        .recommended-item:hover { background: rgba(255, 255, 255, 0.1); }
+        .recommended-icon { font-size: 20px; }
+        .recommended-content { flex: 1; }
+        .recommended-title { font-size: 13px; color: #eef4ff; }
+        .recommended-desc { font-size: 11px; color: #999; margin-top: 2px; }
+        .recommended-action { font-size: 12px; color: var(--accent-color); }
+
+        .start-menu-footer {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(0, 0, 0, 0.25);
+        }
+
+        .power-options, .user-actions { display: flex; gap: 8px; }
+
+        .power-btn, .user-action-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            padding: 6px 12px;
+            border-radius: 8px;
+            color: #eef4ff;
+            font-size: 12px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .power-btn:hover, .user-action-btn:hover { background: rgba(255, 255, 255, 0.2); }
+        #shutdownBtn:hover { background: rgba(200, 40, 40, 0.7); }
+
+        /* ========== 窗口样式 ========== */
+        .window {
+            position: fixed;
+            top: 12%;
+            left: 18%;
+            width: 640px;
+            height: 480px;
+            min-width: 340px;
+            min-height: 300px;
+            background: #222b2b;
+            border-radius: 12px;
+            box-shadow: 0 22px 50px rgba(0,0,0,0.65);
+            display: flex;
+            flex-direction: column;
+            z-index: 100;
+            border: 1px solid #5a7a8a;
+            overflow: hidden;
+        }
+
+        .window-header {
+            background: linear-gradient(135deg, #325a68, #203c48);
+            padding: 10px 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            cursor: move;
+            flex-shrink: 0;
+        }
+
+        .window-controls { display: flex; gap: 8px; }
+
+        .window-btn {
+            width: 26px;
+            height: 26px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            cursor: pointer;
+            background: rgba(0,0,0,0.35);
+            font-size: 13px;
+            transition: 0.15s;
+            color: white;
+        }
+
+        .window-btn:hover { background: rgba(0,0,0,0.65); }
+        .close-win:hover { background: #d44; }
+
+        .window-content {
+            flex: 1;
+            background: var(--win-bg);
+            padding: 18px;
+            overflow-y: auto;
+            color: #eef4ff;
+            line-height: 1.5;
+        }
+
+        .resize-handle {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 16px;
+            height: 16px;
+            cursor: nwse-resize;
+            background: linear-gradient(135deg, transparent 50%, #7a9aaa 50%);
+            z-index: 105;
+        }
+
+        .hidden { display: none !important; }
+
+        /* ========== 浏览器内部样式 ========== */
+        .search-container {
+            text-align: center;
+            padding: 30px 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .search-container .search-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            max-width: 540px;
+            width: 100%;
+            margin: 18px auto;
+            background: #2a3a3a;
+            border-radius: 40px;
+            padding: 4px 4px 4px 18px;
+            border: 1px solid #5a7a8a;
+        }
+
+        .search-container .search-box:focus-within {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(255, 170, 102, 0.2);
+        }
+
+        .search-container .search-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #eef4ff;
+            font-size: 15px;
+            padding: 10px 0;
+            outline: none;
+        }
+
+        .search-container .search-btn {
+            background: linear-gradient(135deg, #4a6a7a, #2a4a5a);
+            border: none;
+            padding: 10px 24px;
+            border-radius: 30px;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .search-container .search-btn:hover { background: linear-gradient(135deg, #5a7a8a, #3a5a6a); }
+
+        .quick-keywords {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            margin-top: 12px;
+        }
+
+        .keyword-chip {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.18);
+            color: #ffd4a8;
+            padding: 5px 12px;
+            border-radius: 16px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .keyword-chip:hover {
+            background: rgba(255, 170, 102, 0.22);
+            border-color: var(--accent-color);
+        }
+
+        /* ========== 设置界面样式 ========== */
+        .win11-settings {
+            display: flex;
+            height: 100%;
+            min-height: 380px;
+            background: rgba(28, 32, 36, 0.95);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .settings-sidebar {
+            width: 190px;
+            background: rgba(36, 40, 46, 0.95);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header {
+            padding: 14px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar-user { display: flex; align-items: center; gap: 10px; }
+        .user-avatar {
+            width: 38px; height: 38px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
+        }
+        .user-name { font-weight: bold; color: #eef4ff; font-size: 13px; }
+        .user-email { font-size: 10px; color: #aaa; }
+
+        .sidebar-nav { flex: 1; padding: 8px; }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 12px;
+            margin: 3px 0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.2s;
+            color: #ccc;
+            font-size: 13px;
+        }
+
+        .nav-item:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+        .nav-item.active { background: rgba(255, 170, 102, 0.22); color: var(--accent-color); font-weight: 600; }
+
+        .settings-content { flex: 1; overflow-y: auto; padding: 16px; }
+        .page-title { font-size: 20px; font-weight: 600; margin-bottom: 16px; color: #eef4ff; }
+
+        .settings-card {
+            background: rgba(48, 54, 60, 0.75);
+            border-radius: 10px;
+            margin-bottom: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .card-header {
+            padding: 12px 16px;
+            font-weight: 600;
+            color: var(--accent-color);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            font-size: 13px;
+        }
+
+        .card-content { padding: 12px 16px; }
+
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            gap: 10px;
+        }
+        .setting-row:last-child { border-bottom: none; }
+        .setting-label { color: #eef4ff; font-size: 13px; }
+        .setting-value { color: #bbb; font-size: 12px; }
+        .setting-hint-small { font-size: 11px; color: #99a; }
+
+        .setting-input {
+            background: rgba(20, 28, 32, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            padding: 6px 10px;
+            color: #eef4ff;
+            font-size: 13px;
+            width: 180px;
+        }
+
+        .setting-btn {
+            background: var(--accent-color);
+            border: none;
+            padding: 7px 16px;
+            border-radius: 6px;
+            color: #1a2a3a;
+            font-weight: bold;
+            font-size: 12px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .setting-btn:hover { opacity: 0.9; transform: scale(1.02); }
+        .setting-btn.danger { background: #c44; color: white; }
+
+        .toggle-switch {
+            width: 42px;
+            height: 22px;
+            background: #5a6a6a;
+            border-radius: 30px;
+            cursor: pointer;
+            position: relative;
+            transition: 0.2s;
+            flex-shrink: 0;
+        }
+        .toggle-switch.active { background: #4caf50; }
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 3px;
+            transition: 0.2s;
+        }
+        .toggle-switch.active::after { left: 21px; }
+
+        .avatar-selector, .theme-selector, .color-selector { display: flex; gap: 10px; flex-wrap: wrap; }
+        .avatar-option {
+            width: 40px; height: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px; cursor: pointer; border: 2px solid transparent;
+        }
+        .avatar-option.selected { border-color: var(--accent-color); background: rgba(255, 170, 102, 0.2); }
+
+        .theme-option { text-align: center; cursor: pointer; }
+        .theme-preview { width: 64px; height: 54px; border-radius: 10px; margin-bottom: 6px; border: 2px solid transparent; }
+        .theme-option.selected .theme-preview { border-color: var(--accent-color); }
+        .dark-preview { background: linear-gradient(135deg, #1a2a3a, #0a121c); }
+        .light-preview { background: linear-gradient(135deg, #d8e6f3, #b8cde0); }
+        .horror-preview { background: linear-gradient(135deg, #4a1515, #220505); }
+
+        .color-option { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
+        .color-option.selected { border-color: white; box-shadow: 0 0 0 2px #ffaa66; }
+
+        /* ========== 通用组件（按钮、卡片、列表） ========== */
+        .game-btn {
+            background: linear-gradient(135deg, #4a6a7a, #2a4a5a);
+            border: 1px solid rgba(255,255,255,0.15);
+            padding: 9px 18px;
+            border-radius: 22px;
+            color: white;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s ease;
+            margin-top: 8px;
+        }
+        .game-btn:hover { transform: scale(1.02); background: linear-gradient(135deg, #5a7a8a, #3a5a6a); }
+
+        .apply-btn {
+            background: linear-gradient(135deg, #8b5a2a, #6a3a1a);
+            border: none;
+            padding: 11px 22px;
+            border-radius: 25px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            font-size: 15px;
+            transition: 0.2s;
+        }
+        .apply-btn:hover { background: linear-gradient(135deg, #aa6a3a, #8a4a2a); transform: scale(1.01); }
+
+        .job-item, .email-item, .diary-entry {
+            background: #283636;
+            padding: 12px 15px;
+            margin: 10px 0;
+            border-radius: 12px;
+            border-left: 4px solid var(--accent-color);
+            line-height: 1.5;
+        }
+
+        .job-item { cursor: pointer; border: 1px solid #4a6a6a; border-left: 4px solid var(--accent-color); transition: 0.2s; }
+        .job-item:hover { background: #344a4a; transform: translateX(4px); }
+
+        .email-item { cursor: pointer; transition: 0.2s; }
+        .email-item:hover { background: #314242; }
+        .email-unread-tag {
+            display: inline-block;
+            background: #ff5555;
+            color: white;
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 8px;
+            margin-left: 6px;
+        }
+
+        /* 安全中心 */
+        .security-status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #283636;
+            padding: 14px;
+            border-radius: 12px;
+            margin-bottom: 12px;
+        }
+        .security-scan-btn {
+            background: linear-gradient(135deg, #3a6a7a, #234555);
+            border: none;
+            padding: 11px 18px;
+            border-radius: 24px;
+            color: white;
+            cursor: pointer;
+            width: 100%;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .security-scan-btn:hover { filter: brightness(1.1); }
+        .security-threat {
+            background: #4a2222;
+            padding: 8px 12px;
+            margin: 6px 0;
+            border-radius: 8px;
+            color: #ff9999;
+            font-size: 12px;
+        }
+
+        /* 结局图鉴 */
+        .achievement-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+            gap: 10px;
+        }
+
+        .achievement-card {
+            background: #283636;
+            border-radius: 12px;
+            padding: 12px 10px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid #4a6a6a;
+        }
+        .achievement-card:hover { transform: translateY(-2px); border-color: var(--accent-color); }
+        .achievement-card.locked { opacity: 0.65; }
+        .achievement-card.unlocked {
+            background: linear-gradient(135deg, #2d5a42, #1f4230);
+            border-color: #88ffaa;
+        }
+        .achievement-icon { font-size: 28px; margin-bottom: 6px; }
+        .achievement-name { font-size: 12px; font-weight: bold; color: #ffdd99; margin-bottom: 4px; }
+        .achievement-category { font-size: 10px; color: #bbb; }
+        .achievement-desc { font-size: 10px; color: #ddd; margin-top: 6px; }
+
+        /* 模态框（结局、摄像头、跳吓） */
+        .ending-modal, .camera-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.92);
+            z-index: 20000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 16px;
+        }
+
+        .ending-content {
+            background: linear-gradient(135deg, #262a2e, #16181a);
+            border-radius: 22px;
+            padding: 28px;
+            max-width: 480px;
+            width: 100%;
+            text-align: center;
+            border: 2px solid #c44;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+            animation: fadeIn 0.35s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.92); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .ending-category {
+            display: inline-block;
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 12px;
+        }
+        .ending-category.bad { background: #4a1a1a; color: #ff8888; }
+        .ending-category.normal { background: #2a4a3a; color: #88ffaa; }
+        .ending-category.good { background: #2a6a4a; color: #ffdd88; }
+        .ending-category.secret { background: #6a4a2a; color: #ffaa66; }
+
+        .ending-title { font-size: 26px; font-weight: bold; margin-bottom: 14px; color: #ff9988; }
+        .ending-text { font-size: 15px; color: #e2e8f0; line-height: 1.65; margin-bottom: 18px; }
+        .ending-hint {
+            font-size: 12px;
+            color: #ffbb77;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: rgba(0,0,0,0.35);
+            border-radius: 10px;
+        }
+
+        .ending-btn {
+            background: #6a3434;
+            border: none;
+            padding: 10px 22px;
+            margin: 5px;
+            color: white;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: 0.2s;
+        }
+        .ending-btn:hover { background: #8a4444; transform: scale(1.03); }
+        .ending-btn.secondary { background: #345a5a; }
+        .ending-btn.secondary:hover { background: #447272; }
+
+        /* 摄像头弹窗 */
+        .camera-modal-content {
+            background: #24282c;
+            border-radius: 20px;
+            width: 100%;
+            max-width: 400px;
+            overflow: hidden;
+            border: 2px solid #c44;
+        }
+        .camera-header { background: #3a1a1a; padding: 14px; color: white; font-weight: bold; text-align: center; }
+        .camera-body { padding: 20px; color: #eef4ff; text-align: center; }
+        .camera-preview { background: #000; height: 170px; margin: 14px 0; border-radius: 12px; overflow: hidden; position: relative; }
+        .fake-cam-feed {
+            width: 100%; height: 100%;
+            background: radial-gradient(circle, #2a3a3a, #0d1414);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+        }
+        .glitch-overlay-fake {
+            position: absolute; inset: 0;
+            background: repeating-linear-gradient(0deg, rgba(255,0,0,0.25) 0px, rgba(255,0,0,0.25) 2px, transparent 2px, transparent 6px);
+            animation: glitchScan 0.1s infinite;
+        }
+        @keyframes glitchScan {
+            0% { opacity: 0.3; transform: translateY(0); }
+            100% { opacity: 0.7; transform: translateY(3px); }
+        }
+        .camera-buttons { display: flex; gap: 14px; justify-content: center; margin-top: 15px; }
+        .cam-btn { padding: 10px 26px; border: none; border-radius: 25px; cursor: pointer; font-weight: bold; }
+        .cam-btn.allow { background: #2e7d32; color: white; }
+        .cam-btn.deny { background: #c62828; color: white; }
+
+        /* 跳吓层 */
+        .jumpscare-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.96);
+            z-index: 20001;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            animation: jumpscareFlash 0.12s 6;
+        }
+        @keyframes jumpscareFlash {
+            0%, 100% { background: rgba(0,0,0,0.96); }
+            50% { background: rgba(180,0,0,0.85); }
+        }
+
+        /* 聊天样式 */
+        .chat-message { margin-bottom: 12px; }
+        .chat-sender { color: #ffaa66; font-weight: bold; font-size: 12px; }
+        .chat-bubble {
+            background: #324242;
+            border-radius: 12px;
+            padding: 8px 12px;
+            margin-top: 4px;
+            display: inline-block;
+            max-width: 85%;
+            font-size: 13px;
+        }
+
+        /* 加载动画 */
+        .loading-spinner { text-align: center; padding: 30px; }
+        .spinner {
+            width: 36px; height: 36px;
+            border: 4px solid #4a6a7a;
+            border-top-color: var(--accent-color);
+            border-radius: 50%;
+            animation: spin 0.9s linear infinite;
+            margin: 0 auto 12px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+
+        /* 移动端适配 */
+        .mobile-tip {
+            position: fixed;
+            bottom: 60px;
+            left: 12px;
+            right: 12px;
+            background: rgba(0,0,0,0.88);
+            border-radius: 12px;
+            padding: 10px 14px;
+            z-index: 10002;
+            border: 1px solid var(--accent-color);
+        }
+        .mobile-tip .tip-content {
+            color: var(--accent-color);
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .mobile-tip button { background: none; border: none; color: white; font-size: 16px; cursor: pointer; }
+
+        @media (max-width: 768px) {
+            .icons-area {
+                position: relative;
+                top: auto; left: auto;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 10px;
+                padding: 12px;
+                max-width: 100%;
+            }
+            .desktop-icon { width: 100%; padding: 8px 4px; }
+            .icon-img { font-size: 26px; }
+            .info-panel {
+                position: relative;
+                top: auto; right: auto;
+                width: 100%;
+                padding: 0 12px 12px;
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+            .quest-container { grid-column: span 2; }
+            .window {
+                top: 6% !important;
+                left: 4% !important;
+                width: 92vw !important;
+                height: 76vh !important;
+            }
+            .win11-settings { flex-direction: column; }
+            .settings-sidebar { width: 100%; flex-direction: row; overflow-x: auto; }
+            .sidebar-header { display: none; }
+            .sidebar-nav { display: flex; flex-direction: row; }
+            .taskbar .search-box { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <!-- 恐怖氛围视觉覆盖层 -->
+    <div class="horror-vignette" id="horrorVignette"></div>
+    <div class="crt-scanlines"></div>
+
+    <!-- 手机操作提示 -->
+    <div id="mobileTip" class="mobile-tip hidden">
+        <div class="tip-content">
+            <span>📱 点击图标打开应用 | 拖动窗口标题栏可移动</span>
+            <button id="closeMobileTip">✕</button>
+        </div>
+    </div>
+
+    <div class="desktop" id="desktopApp">
+        <!-- 桌面图标区 -->
+        <div class="icons-area">
+            <div class="desktop-icon" data-win="email">
+                <div class="icon-img">📧</div>
+                <div class="icon-label">邮件箱</div>
+                <span class="icon-badge hidden" id="emailBadge">1</span>
+            </div>
+            <div class="desktop-icon" data-win="browser">
+                <div class="icon-img">🌐</div>
+                <div class="icon-label">浏览器</div>
+            </div>
+            <div class="desktop-icon" data-win="notepad">
+                <div class="icon-img">📝</div>
+                <div class="icon-label">记事本</div>
+            </div>
+            <div class="desktop-icon" data-win="settings">
+                <div class="icon-img">⚙️</div>
+                <div class="icon-label">设置</div>
+            </div>
+            <div class="desktop-icon" data-win="security">
+                <div class="icon-img">🛡️</div>
+                <div class="icon-label">安全中心</div>
+            </div>
+            <div class="desktop-icon" data-win="news">
+                <div class="icon-img">📰</div>
+                <div class="icon-label">紧急新闻</div>
+                <span class="icon-badge hidden" id="newsBadge">!</span>
+            </div>
+            <div class="desktop-icon" data-win="chat">
+                <div class="icon-img">💬</div>
+                <div class="icon-label">家人群聊</div>
+                <span class="icon-badge hidden" id="chatBadge">!</span>
+            </div>
+            <div class="desktop-icon" data-win="achievements">
+                <div class="icon-img">🏆</div>
+                <div class="icon-label">结局图鉴</div>
+            </div>
+        </div>
+
+        <!-- 右侧信息面板 -->
+        <div class="info-panel">
+            <div class="sanity-container">
+                <div class="sanity-header">
+                    <span class="sanity-label">🧠 理智值</span>
+                    <span class="sanity-percent" id="sanityPercent">100%</span>
+                </div>
+                <div class="sanity-bar-bg">
+                    <div class="sanity-bar-fill" id="sanityFill" style="width: 100%"></div>
+                </div>
+            </div>
+            <div class="quest-container" id="questContainer">
+                <div class="quest-title">📋 当前目标</div>
+                <div id="questText">🔍 急需一份工作。打开「浏览器」搜索高薪工作...</div>
+            </div>
+            <div class="network-container" id="networkContainer" title="点击切换网络连接状态">
+                <div class="network-status" id="networkStatus">
+                    <div class="network-left-info">
+                        <span class="network-icon" id="networkIcon">🌐</span>
+                        <span class="network-text">网络已连接</span>
+                    </div>
+                    <span class="network-toggle-pill" id="networkActionText">点击断开</span>
+                </div>
+            </div>
+            <div class="ending-progress-container" id="endingProgressCard" title="点击查看16个结局图鉴">
+                <div class="ending-progress-title">
+                    <span>🏆 结局解锁进度</span>
+                    <span id="endingProgressText">0 / 16</span>
+                </div>
+                <div class="ending-progress-bar">
+                    <div class="ending-progress-fill" id="endingProgressFill" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Windows 11 风格任务栏 -->
+        <div class="taskbar">
+            <div class="taskbar-left">
+                <div class="start-btn" id="startBtn" title="开始菜单">
+                    <svg class="start-icon" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <path d="M4 4H11V11H4V4Z" fill="#66b3ff"/>
+                        <path d="M13 4H20V11H13V4Z" fill="#66b3ff"/>
+                        <path d="M4 13H11V20H4V13Z" fill="#66b3ff"/>
+                        <path d="M13 13H20V20H13V13Z" fill="#66b3ff"/>
+                    </svg>
+                </div>
+                <div class="search-box" id="searchBox">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" class="search-input" id="taskbarSearch" placeholder="搜索应用...">
+                </div>
+            </div>
+            
+            <div class="taskbar-center" id="taskTray">
+                <div class="task-icon" data-win="email" title="邮件箱">📧</div>
+                <div class="task-icon" data-win="browser" title="浏览器">🌐</div>
+                <div class="task-icon" data-win="notepad" title="记事本">📝</div>
+                <div class="task-icon" data-win="settings" title="设置">⚙️</div>
+                <div class="task-icon" data-win="security" title="安全中心">🛡️</div>
+                <div class="task-icon" data-win="achievements" title="结局图鉴">🏆</div>
+            </div>
+            
+            <div class="taskbar-right">
+                <div class="system-icon" id="networkToggleBtn" title="切换网络连接">🌐</div>
+                <div class="system-icon" id="volumeBtn" title="切换音效">🔊</div>
+                <div class="clock" id="clock" title="系统时间（可在设置中调整）">
+                    <span class="clock-time" id="clockTime">23:52:00</span>
+                    <span class="clock-date" id="clockDate">11/20</span>
+                </div>
+                <div class="show-desktop" id="showDesktopBtn" title="最小化/关闭所有窗口"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Windows 11 风格开始菜单 -->
+    <div id="startMenu" class="start-menu hidden">
+        <div class="start-menu-header">
+            <div class="user-profile">
+                <div class="user-avatar-large" id="startMenuAvatar">👤</div>
+                <div class="user-info-large">
+                    <div class="user-name-large" id="startMenuUserName">玩家</div>
+                    <div class="user-email-large" id="startMenuUserEmail">player@horror-game.com</div>
+                </div>
+                <button class="user-settings-btn" id="userSettingsBtn" title="账号设置">⚙️</button>
+            </div>
+        </div>
+        
+        <div class="start-menu-search">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="startMenuSearch" placeholder="搜索应用、设置和文档...">
+        </div>
+        
+        <div class="start-menu-content">
+            <div class="pinned-apps">
+                <div class="section-title">📌 已固定应用</div>
+                <div class="apps-grid" id="pinnedApps"></div>
+            </div>
+            
+            <div class="all-apps">
+                <div class="section-title">📱 所有应用</div>
+                <div class="apps-list" id="allAppsList"></div>
+            </div>
+            
+            <div class="recommended-section">
+                <div class="section-title">💡 生存建议</div>
+                <div class="recommended-items" id="recommendedItems"></div>
+            </div>
+        </div>
+        
+        <div class="start-menu-footer">
+            <div class="power-options">
+                <button class="power-btn" id="shutdownBtn">🔌 关机</button>
+                <button class="power-btn" id="restartBtn">🔄 重启本局</button>
+            </div>
+            <div class="user-actions">
+                <button class="user-action-btn" id="achievementsBtn">🏆 结局图鉴</button>
+                <button class="user-action-btn" id="settingsQuickBtn">⚙️ 设置</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 窗口容器 -->
+    <div id="windows-container"></div>
+
+    <!-- 假摄像头权限弹窗 -->
+    <div id="cameraModal" class="camera-modal hidden">
+        <div class="camera-modal-content">
+            <div class="camera-header">📷 摄像头权限请求</div>
+            <div class="camera-body">
+                <p>“伪人识别测试员” 职位需要开启摄像头进行生物面容验证</p>
+                <div class="camera-preview">
+                    <div class="fake-cam-feed">
+                        <span style="font-size: 36px;">👁️</span>
+                        <span style="font-size: 13px; color: #ff9999; margin-top: 8px;">正在等待视频信号接入...</span>
+                        <div class="glitch-overlay-fake"></div>
+                    </div>
+                </div>
+                <div class="camera-buttons">
+                    <button id="cameraAllowBtn" class="cam-btn allow">允许访问</button>
+                    <button id="cameraDenyBtn" class="cam-btn deny">拒绝</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 结局模态框 -->
+    <div id="endingModal" class="ending-modal hidden">
+        <div class="ending-content">
+            <div class="ending-category" id="endingCategory"></div>
+            <div class="ending-title" id="endingTitle">结局</div>
+            <div class="ending-text" id="endingText"></div>
+            <div class="ending-hint" id="endingHint"></div>
+            <button id="restartGameBtn" class="ending-btn">🔄 重新开始一局</button>
+            <button id="continueBtn" class="ending-btn secondary">🏆 查看结局图鉴</button>
+        </div>
+    </div>
+
+    <script>
+    /* =====================================================================
+       1. 工具模块 Helpers (修复时钟覆盖子元素问题，支持游戏内虚拟时钟)
+    ===================================================================== */
+    const Helpers = {
+        _simMinutesOffset: 0, // 支持玩家在设置里把时间调到午夜 00:00
+
+        showNotification: function(message, duration, type) {
+            if (window.Notifications) {
+                Notifications.show(message, type || 'info', duration || 4000);
+            }
+        },
+
+        randomInt: function(min, max) {
+            return Math.floor(min + Math.random() * (max - min + 1));
+        },
+
+        clamp: function(value, min, max) {
+            return Math.min(max, Math.max(min, value));
+        },
+
+        save: function(key, data) {
+            try {
+                localStorage.setItem(key, JSON.stringify(data));
+            } catch(e) { console.warn('save error', e); }
+        },
+
+        load: function(key, defaultValue) {
+            try {
+                var saved = localStorage.getItem(key);
+                if (saved !== null) return JSON.parse(saved);
+            } catch(e) { console.warn('load error', e); }
+            return defaultValue;
+        },
+
+        getRandomPosition: function(winWidth, winHeight) {
+            var w = winWidth || 620;
+            var h = winHeight || 460;
+            var maxLeft = Math.max(40, window.innerWidth - w - 60);
+            var maxTop = Math.max(40, window.innerHeight - h - 80);
+            return {
+                left: this.clamp(this.randomInt(60, maxLeft), 20, maxLeft),
+                top: this.clamp(this.randomInt(40, maxTop), 25, maxTop)
+            };
+        },
+
+        getCurrentGameTime: function() {
+            var now = new Date();
+            if (this._simMinutesOffset !== 0) {
+                now = new Date(now.getTime() + this._simMinutesOffset * 60000);
+            }
+            return now;
+        },
+
+        setGameTimeToMidnight: function() {
+            var realNow = new Date();
+            var target = new Date(realNow);
+            target.setHours(0, 0, 0, 0);
+            if (target.getTime() < realNow.getTime()) {
+                target.setDate(target.getDate() + 1);
+            }
+            this._simMinutesOffset = Math.round((target.getTime() - realNow.getTime()) / 60000);
+            this.updateClock();
+        },
+
+        resetGameTime: function() {
+            this._simMinutesOffset = 0;
+            this.updateClock();
+        },
+
+        updateClock: function() {
+            var d = this.getCurrentGameTime();
+            var timeEl = document.getElementById('clockTime');
+            var dateEl = document.getElementById('clockDate');
+            if (timeEl) {
+                timeEl.textContent =
+                    d.getHours().toString().padStart(2, '0') + ':' +
+                    d.getMinutes().toString().padStart(2, '0') + ':' +
+                    d.getSeconds().toString().padStart(2, '0');
+            }
+            if (dateEl) {
+                dateEl.textContent =
+                    (d.getMonth() + 1).toString().padStart(2, '0') + '/' +
+                    d.getDate().toString().padStart(2, '0');
+            }
+        }
+    };
+
+    /* =====================================================================
+       2. 通知系统 Notifications
+    ===================================================================== */
+    const Notifications = {
+        _container: null,
+
+        init: function() {
+            if (this._container) return;
+            this._container = document.createElement('div');
+            this._container.className = 'notifications-container';
+            this._container.style.cssText = 'position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 15000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; align-items: center;';
+            document.body.appendChild(this._container);
+
+            if (!document.getElementById('notification-styles')) {
+                var style = document.createElement('style');
+                style.id = 'notification-styles';
+                style.textContent = '@keyframes slideDownIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } } @keyframes slideUpOut { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-20px); opacity: 0; } }';
+                document.head.appendChild(style);
+            }
+        },
+
+        show: function(message, type, duration) {
+            if (window.Settings && Settings.system && Settings.system.notifications === false) return;
+            type = type || 'info';
+            duration = duration || 3500;
+
+            var notification = document.createElement('div');
+            var icons = { info: '📢', warning: '⚠️', error: '💀', success: '✅' };
+            var icon = icons[type] || '📢';
+
+            var bgColor = type === 'error' ? 'rgba(65, 16, 16, 0.94)' :
+                          type === 'warning' ? 'rgba(65, 48, 16, 0.94)' :
+                          type === 'success' ? 'rgba(18, 62, 42, 0.94)' :
+                          'rgba(22, 42, 56, 0.94)';
+            var borderColor = type === 'error' ? '#ff5555' :
+                              type === 'warning' ? '#ffbb55' :
+                              type === 'success' ? '#55ee99' : '#66bbff';
+
+            notification.style.cssText = 'pointer-events: auto; background: ' + bgColor + '; border: 1px solid ' + borderColor + '; border-left: 4px solid ' + borderColor + '; border-radius: 12px; padding: 10px 16px; color: #fff; min-width: 260px; max-width: 380px; box-shadow: 0 8px 25px rgba(0,0,0,0.5); animation: slideDownIn 0.25s ease; backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px;';
+
+            notification.innerHTML = '<div style="display:flex;align-items:center;gap:8px;"><span>' + icon + '</span><span>' + message + '</span></div>' +
+                '<button style="background:none;border:none;color:' + borderColor + ';cursor:pointer;font-size:14px;">✕</button>';
+
+            notification.querySelector('button').onclick = function() { notification.remove(); };
+
+            if (this._container) {
+                this._container.appendChild(notification);
+            } else {
+                document.body.appendChild(notification);
+            }
+
+            setTimeout(function() {
+                if (!notification.parentNode) return;
+                notification.style.animation = 'slideUpOut 0.25s ease';
+                setTimeout(function() { notification.remove(); }, 240);
+            }, duration);
+        },
+
+        info: function(m, d) { this.show(m, 'info', d); },
+        warning: function(m, d) { this.show(m, 'warning', d); },
+        error: function(m, d) { this.show(m, 'error', d); },
+        success: function(m, d) { this.show(m, 'success', d); }
+    };
+
+    /* =====================================================================
+       3. 任务提示系统 Quest (已修复初始化绑定)
+    ===================================================================== */
+    const Quest = {
+        _questDiv: null,
+        _container: null,
+
+        init: function(questDiv) {
+            this._questDiv = questDiv || document.getElementById('questText');
+            this._container = document.getElementById('questContainer');
+        },
+
+        update: function(message, showNotification) {
+            if (!this._questDiv) this._questDiv = document.getElementById('questText');
+            if (this._questDiv) {
+                this._questDiv.innerHTML = message;
+            }
+            if (showNotification !== false) {
+                Notifications.info(message, 3500);
+            }
+            if (this._container) {
+                this._container.style.borderColor = '#ffaa66';
+                var self = this;
+                setTimeout(function() {
+                    if (self._container) self._container.style.borderColor = 'rgba(255,255,255,0.15)';
+                }, 600);
+            }
+        }
+    };
+
+    /* =====================================================================
+       4. 16结局数据 EndingsData
+    ===================================================================== */
+    var EndingsData = {
+        list: {
+            1: { name: "💀 身份覆写", category: "bad", desc: "伪人完全复制了你的生物特征与记忆。现在，坐在电脑前微笑着敲击键盘的，已经不再是你了……", condition: "被入侵后点击红色挣扎按钮，或未搜索时理智归零" },
+            2: { name: "🔌 断电逃生", category: "normal", desc: "在异常彻底蔓延之前，你果断按下了电源键。屏幕陷入黑暗，虽然失去了工作，但你保住了自己。", condition: "点击开始菜单中的「关机」" },
+            3: { name: "🌐 断网避难", category: "normal", desc: "拔掉网线后，所有诡异的弹窗瞬间静止。没有了网络的桥梁，伪人失去了追踪你的坐标。", condition: "应聘工作后，点击右上角或任务栏「断开网络」" },
+            4: { name: "🧬 基因侵蚀", category: "bad", desc: "精神极度脆弱的你没能抵挡住高频闪烁的认知污染，你的细胞正在按照伪人的代码重新排列……", condition: "理智值低于 30% 时触发伪人入侵" },
+            5: { name: "🕳️ 深渊凝视", category: "bad", desc: "你在网络深处查阅了太多关于伪人的禁忌资料。当你凝视深渊时，深渊顺着网线爬进了你的眼睛。", condition: "进行过搜索后，理智值耗尽归零" },
+            6: { name: "🛡️ 防火墙无敌！", category: "good", desc: "防火墙、病毒防护与DNS加密构筑了铜墙铁壁！安全中心成功拦截并清除了所有伪人入侵进程。", condition: "开启防火墙、病毒防护、DNS加密后触发入侵或清除威胁" },
+            7: { name: "✨ 驱逐仪式", category: "good", desc: "你依照古籍记载，集齐三重系统防护并念出驱逐咒语，耀眼的白光将伪人彻底逐出了数字世界！", condition: "搜索「如何摆脱伪人」+ 开启全防护 + 执行驱逐仪式" },
+            8: { name: "🏠 家庭团圆", category: "good", desc: "看到紧急新闻后你第一时间通知了家人关闭电子设备。全家人成功撤离危险区域，平安团聚！", condition: "理智≤80%触发紧急新闻后点击「提醒家人」，再打开「家人群聊」" },
+            9: { name: "📖 知识就是力量", category: "good", desc: "通过大量检索与交叉比对，你摸清了伪人的行动规律与弱点，并把求生指南匿名发布到了全网。", condition: "在浏览器中累计搜索 3 次及以上" },
+            10: { name: "🔍 真相大白", category: "good", desc: "你不仅多次击退了伪人，还阅读了系统深处的所有加密邮件，拼凑出了伪人计划的完整真相！", condition: "累计解锁 3 个好结局（跨局保留）+ 阅读邮件箱内全部邮件" },
+            11: { name: "🎭 双重人格", category: "secret", desc: "在理智游走于崩溃边缘时，你反复开关系统防护，意外唤醒了潜藏在意识深处的另一个“你”……", condition: "理智值处于 40%~60% 之间时，切换安全防护开关 3 次" },
+            12: { name: "🔮 预知未来", category: "secret", desc: "你在记事本中写下的预言分毫不差地应验了！因果律被改写，你获得了观测时间线的能力。", condition: "在记事本写下包含「入侵」或「伪人」的预言，随后触发入侵" },
+            13: { name: "👁️ 伪人之眼", category: "secret", desc: "三次拒绝后的第四次妥协，让摄像头捕捉到了屏幕背后的真实维度——原来我们才是被观察的样本。", condition: "应聘「伪人识别测试员」时拒绝摄像头 3 次，第 4 次点击允许" },
+            14: { name: "💻 代码真相", category: "secret", desc: "保持绝对冷静的你看穿了这一切：没有伪人，没有求职，整个桌面不过是一段运行中的程序代码。", condition: "在理智值保持 100% 时搜索「世界是程序」" },
+            15: { name: "📜 古老契约", category: "secret", desc: "午夜零点的钟声敲响，你在古籍仪式中唤醒了封印在底层代码中的远古契约，伪人向你俯首称臣。", condition: "搜索「如何摆脱伪人」后，在午夜 00:00 前后执行驱逐仪式（可在设置调整时间）" },
+            16: { name: "💀 全军覆没", category: "bad", desc: "你选择了冷漠与忽视。当你再次打开家人群聊时，屏幕上只剩下无数个一模一样的诡异笑脸 ( ՞ټ՞ )……", condition: "紧急新闻弹窗时选择「继续工作」，随后打开「家人群聊」" }
+        },
+
+        getCategoryName: function(category) {
+            var names = { bad: '💀 坏结局', normal: '📄 普通结局', good: '✨ 好结局', secret: '🔮 隐藏结局' };
+            return names[category] || '结局';
+        },
+
+        get: function(id) { return this.list[id]; },
+        getAll: function() { return this.list; },
+        getTotalCount: function() { return 16; }
+    };
+
+    /* =====================================================================
+       5. 游戏全局状态 GameState (持久化已解锁结局与累计好结局)
+    ===================================================================== */
+    const GameState = {
+        step: 0,
+        sanity: 100,
+        jumpscareTriggered: false,
+        jobApplied: false,
+        emailWarningReceived: false,
+        glitchInterval: null,
+        isOnline: true,
+        gameEnded: false,
+        unlockedEndings: [],
+        secretSearchUnlocked: false,
+        globalDoomTriggered: false,
+
+        jobs: [
+            { id: 1, title: "🌙 夜间守墓人", company: "永恒安息有限公司", salary: "月薪 25000-35000", desc: "负责夜间墓地巡逻，需要极强的心理素质。", danger: "中度", requirement: "能熬夜，不怕鬼", fakeCamera: false },
+            { id: 2, title: "👤 伪人识别测试员", company: "人类身份验证局", salary: "日薪 8000", desc: "通过摄像头识别伪装成人类的异常个体。", danger: "极高", requirement: "必须开启摄像头", fakeCamera: true },
+            { id: 3, title: "📀 数据清理师", company: "旧世界档案室", salary: "月薪 18000", desc: "清理被污染的数据档案。", danger: "高", requirement: "熟悉各类文件格式", fakeCamera: false },
+            { id: 4, title: "🕯️ 午夜档案管理员", company: "遗忘档案库", salary: "月薪 22000", desc: "管理午夜后才能查阅的机密档案。", danger: "高", requirement: "胆大心细", fakeCamera: false },
+            { id: 5, title: "👁️ 梦境监视员", company: "潜意识安全局", salary: "月薪 30000", desc: "监视人们的梦境，防止伪人入侵。", danger: "极高", requirement: "需要佩戴特殊设备", fakeCamera: false }
+        ],
+
+        getJob: function(id) {
+            for (var i = 0; i < this.jobs.length; i++) {
+                if (this.jobs[i].id === id) return this.jobs[i];
+            }
+            return null;
+        },
+
+        reduceSanity: function(amount) {
+            this.sanity = Math.max(0, this.sanity - amount);
+            this.syncSanityUI();
+            return this.sanity;
+        },
+
+        increaseSanity: function(amount) {
+            this.sanity = Math.min(100, this.sanity + amount);
+            this.syncSanityUI();
+            return this.sanity;
+        },
+
+        syncSanityUI: function() {
+            var fill = document.getElementById('sanityFill');
+            var percent = document.getElementById('sanityPercent');
+            if (fill) fill.style.width = this.sanity + '%';
+            if (percent) percent.innerText = this.sanity + '%';
+
+            // 动态更新恐怖视觉暗角强度
+            var intensity = Math.max(0, (100 - this.sanity) / 100);
+            if (this.step >= 2) intensity = Math.max(intensity, 0.55);
+            document.documentElement.style.setProperty('--horror-intensity', intensity.toFixed(2));
+        },
+
+        unlockEnding: function(endingId) {
+            var isNew = false;
+            if (this.unlockedEndings.indexOf(endingId) === -1) {
+                this.unlockedEndings.push(endingId);
+                isNew = true;
+            }
+            this.save();
+            return isNew;
+        },
+
+        isEndingUnlocked: function(endingId) {
+            return this.unlockedEndings.indexOf(endingId) !== -1;
+        },
+
+        getUnlockedCount: function() {
+            return this.unlockedEndings.length;
+        },
+
+        getGoodEndingsCount: function() {
+            var count = 0;
+            for (var i = 6; i <= 10; i++) {
+                if (this.unlockedEndings.indexOf(i) !== -1) count++;
+            }
+            return count;
+        },
+
+        save: function() {
+            Helpers.save('pseudoEndings', this.unlockedEndings);
+        },
+
+        load: function() {
+            var endings = Helpers.load('pseudoEndings', []);
+            if (Array.isArray(endings)) {
+                this.unlockedEndings = endings;
+            }
+            this.syncSanityUI();
+        },
+
+        reset: function() {
+            this.step = 0;
+            this.sanity = 100;
+            this.jumpscareTriggered = false;
+            this.jobApplied = false;
+            this.emailWarningReceived = false;
+            this.gameEnded = false;
+            this.globalDoomTriggered = false;
+            this.isOnline = true;
+            this.secretSearchUnlocked = false;
+            if (this.glitchInterval) clearInterval(this.glitchInterval);
+            this.syncSanityUI();
+        }
+    };
+
+    /* =====================================================================
+       6. 设置系统 Settings (修复声音引用、新增系统时间调整)
+    ===================================================================== */
+    var Settings = {
+        user: {
+            name: "玩家",
+            avatar: "👤",
+            email: "player@horror-game.com"
+        },
+        system: {
+            darkMode: true,
+            notifications: true,
+            sound: true,
+            soundVolume: 50,
+            animations: true,
+            currentTheme: "dark"
+        },
+        personalization: {
+            theme: "dark",
+            accentColor: "#ffaa66",
+            transparency: true
+        },
+        privacy: {
+            firewallEnabled: false,
+            privacyEnabled: false,
+            antivirusEnabled: false,
+            dnsEnabled: false
+        },
+        currentPage: "privacy",
+        _settingsContent: null,
+        _game: null,
+        _soundInstance: null,
+
+        init: function(settingsContent, game) {
+            this._settingsContent = settingsContent;
+            this._game = game;
+            this.load();
+            this.render();
+            this.applyTheme();
+            this.applyAccentColor();
+            this.initSoundSystem();
+        },
+
+        load: function() {
+            var saved = Helpers.load('pseudoSettings', null);
+            if (saved) {
+                this.user = Object.assign(this.user, saved.user || {});
+                this.system = Object.assign(this.system, saved.system || {});
+                this.personalization = Object.assign(this.personalization, saved.personalization || {});
+                // 每局默认关闭安全防护，保留玩家策略空间
+            }
+        },
+
+        save: function() {
+            Helpers.save('pseudoSettings', {
+                user: this.user,
+                system: this.system,
+                personalization: this.personalization
+            });
+        },
+
+        initSoundSystem: function() {
+            var self = this;
+            document.addEventListener('click', function initAudio() {
+                if (!self._soundInstance) {
+                    try {
+                        self._soundInstance = new (window.AudioContext || window.webkitAudioContext)();
+                    } catch(e) {}
+                }
+                if (self._soundInstance && self._soundInstance.state === 'suspended') {
+                    self._soundInstance.resume();
+                }
+            }, { once: true });
+        },
+
+        playSound: function(type) {
+            if (!this.system.sound) return;
+            try {
+                if (!this._soundInstance) {
+                    this._soundInstance = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (this._soundInstance.state === 'suspended') {
+                    this._soundInstance.resume();
+                }
+                var ctx = this._soundInstance;
+                var now = ctx.currentTime;
+                var osc = ctx.createOscillator();
+                var gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                var vol = (this.system.soundVolume / 100) * 0.25;
+
+                if (type === 'click') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(780, now);
+                    gain.gain.setValueAtTime(vol * 0.5, now);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+                    osc.start(now);
+                    osc.stop(now + 0.08);
+                } else if (type === 'notification') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(587.33, now);
+                    osc.frequency.setValueAtTime(880, now + 0.1);
+                    gain.gain.setValueAtTime(vol * 0.7, now);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+                    osc.start(now);
+                    osc.stop(now + 0.25);
+                } else if (type === 'error') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(160, now);
+                    osc.frequency.linearRampToValueAtTime(95, now + 0.35);
+                    gain.gain.setValueAtTime(vol, now);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+                    osc.start(now);
+                    osc.stop(now + 0.35);
+                } else if (type === 'success') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(523.25, now);
+                    osc.frequency.setValueAtTime(659.25, now + 0.1);
+                    osc.frequency.setValueAtTime(783.99, now + 0.2);
+                    gain.gain.setValueAtTime(vol * 0.7, now);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+                    osc.start(now);
+                    osc.stop(now + 0.35);
+                }
+            } catch(e) {}
+        },
+
+        applyTheme: function() {
+            var themes = {
+                dark: {
+                    desktop: 'linear-gradient(135deg, #2d4a6e 0%, #1a3a4a 100%)',
+                    body: 'radial-gradient(circle at center, #1a2a3a 0%, #0a121c 100%)',
+                    text: '#eef4ff'
+                },
+                light: {
+                    desktop: 'linear-gradient(135deg, #b8d0e8 0%, #8fb2d4 100%)',
+                    body: 'radial-gradient(circle at center, #dce8f5 0%, #b8cde0 100%)',
+                    text: '#ffffff'
+                },
+                horror: {
+                    desktop: 'linear-gradient(135deg, #4a1818 0%, #240808 100%)',
+                    body: 'radial-gradient(circle at center, #3a0e0e 0%, #150303 100%)',
+                    text: '#ffcccc'
+                }
+            };
+            var t = themes[this.system.currentTheme] || themes.dark;
+            document.documentElement.style.setProperty('--bg-desktop', t.desktop);
+            document.documentElement.style.setProperty('--bg-body', t.body);
+            document.documentElement.style.setProperty('--text-main', t.text);
+        },
+
+        applyAccentColor: function() {
+            document.documentElement.style.setProperty('--accent-color', this.personalization.accentColor);
+        },
+
+        render: function() {
+            if (!this._settingsContent) return;
+            var html = '<div class="win11-settings">' +
+                '<div class="settings-sidebar">' +
+                '<div class="sidebar-header"><div class="sidebar-user">' +
+                '<div class="user-avatar">' + this.user.avatar + '</div>' +
+                '<div><div class="user-name">' + this.user.name + '</div><div class="user-email">' + this.user.email + '</div></div>' +
+                '</div></div>' +
+                '<div class="sidebar-nav">' +
+                '<div class="nav-item ' + (this.currentPage === 'privacy' ? 'active' : '') + '" data-page="privacy">🔒 隐私与安全</div>' +
+                '<div class="nav-item ' + (this.currentPage === 'system' ? 'active' : '') + '" data-page="system">⚙️ 系统与时间</div>' +
+                '<div class="nav-item ' + (this.currentPage === 'personalization' ? 'active' : '') + '" data-page="personalization">🎨 个性化</div>' +
+                '<div class="nav-item ' + (this.currentPage === 'account' ? 'active' : '') + '" data-page="account">👤 账号</div>' +
+                '<div class="nav-item ' + (this.currentPage === 'about' ? 'active' : '') + '" data-page="about">ℹ️ 关于</div>' +
+                '</div></div>' +
+                '<div class="settings-content">' + this.renderPage(this.currentPage) + '</div>' +
+                '</div>';
+
+            this._settingsContent.innerHTML = html;
+
+            var self = this;
+            var navItems = this._settingsContent.querySelectorAll('.nav-item');
+            for (var i = 0; i < navItems.length; i++) {
+                (function(el) {
+                    el.onclick = function() {
+                        self.currentPage = el.getAttribute('data-page');
+                        self.playSound('click');
+                        self.render();
+                    };
+                })(navItems[i]);
+            }
+            this.bindEvents();
+        },
+
+        renderPage: function(page) {
+            if (page === 'privacy') {
+                return '<h2 class="page-title">🔒 隐私与安全防护</h2>' +
+                    '<div class="settings-card"><div class="card-header">核心安全开关（全开可抵御伪人入侵）</div><div class="card-content">' +
+                    '<div class="setting-row"><div><div class="setting-label">🛡️ Windows 防火墙</div><div class="setting-hint-small">阻止外部恶意数据入侵与理智流失</div></div>' +
+                    '<div class="toggle-switch ' + (this.privacy.firewallEnabled ? 'active' : '') + '" id="firewallToggle"></div></div>' +
+                    '<div class="setting-row"><div><div class="setting-label">👁️ 隐私保护模式</div><div class="setting-hint-small">屏蔽异常生物信号追踪</div></div>' +
+                    '<div class="toggle-switch ' + (this.privacy.privacyEnabled ? 'active' : '') + '" id="privacyToggle"></div></div>' +
+                    '<div class="setting-row"><div><div class="setting-label">🦠 实时病毒防护</div><div class="setting-hint-small">允许安全中心清除检测到的伪人威胁</div></div>' +
+                    '<div class="toggle-switch ' + (this.privacy.antivirusEnabled ? 'active' : '') + '" id="antivirusToggle"></div></div>' +
+                    '<div class="setting-row"><div><div class="setting-label">🔐 DNS 加密</div><div class="setting-hint-small">加密网络请求，完成驱逐仪式必需项</div></div>' +
+                    '<div class="toggle-switch ' + (this.privacy.dnsEnabled ? 'active' : '') + '" id="dnsToggle"></div></div>' +
+                    '</div></div>';
+            }
+            if (page === 'system') {
+                var curTime = Helpers.getCurrentGameTime();
+                var timeStr = curTime.getHours().toString().padStart(2,'0') + ':' + curTime.getMinutes().toString().padStart(2,'0');
+                return '<h2 class="page-title">⚙️ 系统与时间设置</h2>' +
+                    '<div class="settings-card"><div class="card-header">🕒 系统时钟（影响特定午夜仪式）</div><div class="card-content">' +
+                    '<div class="setting-row"><div><div class="setting-label">当前系统时间：<strong>' + timeStr + '</strong></div><div class="setting-hint-small">某些古老契约只能在午夜 00:00 触发</div></div>' +
+                    '<button id="setMidnightBtn" class="setting-btn">🌙 调至午夜 00:00</button></div>' +
+                    '<div class="setting-row"><div class="setting-label">恢复真实时间</div>' +
+                    '<button id="resetTimeBtn" class="setting-btn" style="background:#5a6a7a;color:white;">同步真实时钟</button></div>' +
+                    '</div></div>' +
+                    '<div class="settings-card"><div class="card-header">🔊 声音与通知</div><div class="card-content">' +
+                    '<div class="setting-row"><span class="setting-label">系统音效</span>' +
+                    '<div class="toggle-switch ' + (this.system.sound ? 'active' : '') + '" id="soundToggle"></div></div>' +
+                    '<div class="setting-row"><span class="setting-label">音量 (' + this.system.soundVolume + '%)</span>' +
+                    '<input type="range" id="volumeSlider" min="0" max="100" value="' + this.system.soundVolume + '"></div>' +
+                    '<div class="setting-row"><span class="setting-label">弹窗通知</span>' +
+                    '<div class="toggle-switch ' + (this.system.notifications ? 'active' : '') + '" id="notificationsToggle"></div></div>' +
+                    '</div></div>' +
+                    '<div class="settings-card"><div class="card-header">🗑️ 数据重置</div><div class="card-content">' +
+                    '<div class="setting-row"><span class="setting-label">清除所有已解锁结局记录</span>' +
+                    '<button id="factoryResetBtn" class="setting-btn danger">恢复出厂设置</button></div>' +
+                    '</div></div>';
+            }
+            if (page === 'personalization') {
+                return '<h2 class="page-title">🎨 个性化</h2>' +
+                    '<div class="settings-card"><div class="card-header">桌面主题</div><div class="card-content">' +
+                    '<div class="theme-selector">' +
+                    '<div class="theme-option ' + (this.system.currentTheme === 'dark' ? 'selected' : '') + '" data-theme="dark"><div class="theme-preview dark-preview"></div><span style="font-size:12px;">深色</span></div>' +
+                    '<div class="theme-option ' + (this.system.currentTheme === 'light' ? 'selected' : '') + '" data-theme="light"><div class="theme-preview light-preview"></div><span style="font-size:12px;">浅色</span></div>' +
+                    '<div class="theme-option ' + (this.system.currentTheme === 'horror' ? 'selected' : '') + '" data-theme="horror"><div class="theme-preview horror-preview"></div><span style="font-size:12px;">恐怖红</span></div>' +
+                    '</div></div></div>' +
+                    '<div class="settings-card"><div class="card-header">强调色</div><div class="card-content">' +
+                    '<div class="color-selector">' +
+                    ['#ffaa66', '#66aaff', '#ff66aa', '#66ffaa', '#aa66ff'].map(function(c) {
+                        return '<div class="color-option ' + (Settings.personalization.accentColor === c ? 'selected' : '') + '" data-color="' + c + '" style="background:' + c + ';"></div>';
+                    }).join('') +
+                    '</div></div></div>';
+            }
+            if (page === 'account') {
+                return '<h2 class="page-title">👤 账号信息</h2>' +
+                    '<div class="settings-card"><div class="card-header">个人资料</div><div class="card-content">' +
+                    '<div class="setting-row"><span class="setting-label">选择头像</span><div class="avatar-selector">' +
+                    ['👤', '👻', '👾', '🤖', '🎭'].map(function(av) {
+                        return '<div class="avatar-option ' + (Settings.user.avatar === av ? 'selected' : '') + '" data-avatar="' + av + '">' + av + '</div>';
+                    }).join('') +
+                    '</div></div>' +
+                    '<div class="setting-row"><span class="setting-label">用户名</span><input type="text" id="userNameInput" class="setting-input" value="' + this.user.name + '"></div>' +
+                    '<div class="setting-row"><span class="setting-label">邮箱</span><input type="email" id="userEmailInput" class="setting-input" value="' + this.user.email + '"></div>' +
+                    '<div class="setting-row"><button id="saveAccountBtn" class="setting-btn">保存更改</button></div>' +
+                    '</div></div>';
+            }
+            return '<h2 class="page-title">ℹ️ 关于《伪人入侵》</h2>' +
+                '<div class="settings-card"><div class="card-header">虚拟桌面心理恐怖游戏 v2.0</div><div class="card-content">' +
+                '<p style="font-size:13px;color:#ccc;line-height:1.7;">你急需一份高薪工作，却在深夜打开了不该访问的招聘网页。<br>通过浏览器检索线索、查看邮件与新闻、调整系统安全设置，在 16 个截然不同的结局中寻找真相！</p>' +
+                '</div></div>';
+        },
+
+        bindEvents: function() {
+            var self = this;
+            var root = this._settingsContent;
+
+            var bindToggle = function(id, obj, key, label) {
+                var el = root.querySelector('#' + id);
+                if (!el) return;
+                el.onclick = function() {
+                    obj[key] = !obj[key];
+                    el.classList.toggle('active');
+                    self.save();
+                    self.playSound('click');
+                    if (label) {
+                        Notifications.info(obj[key] ? ('✅ ' + label + '已开启') : ('⚠️ ' + label + '已关闭'), 2000);
+                        if (self._game && self._game.addToggleCount) self._game.addToggleCount();
+                        if (window.Security) Security.render();
+                    }
+                };
+            };
+
+            bindToggle('firewallToggle', this.privacy, 'firewallEnabled', 'Windows 防火墙');
+            bindToggle('privacyToggle', this.privacy, 'privacyEnabled', '隐私保护模式');
+            bindToggle('antivirusToggle', this.privacy, 'antivirusEnabled', '实时病毒防护');
+            bindToggle('dnsToggle', this.privacy, 'dnsEnabled', 'DNS 加密');
+            bindToggle('soundToggle', this.system, 'sound', null);
+            bindToggle('notificationsToggle', this.system, 'notifications', null);
+
+            var volSlider = root.querySelector('#volumeSlider');
+            if (volSlider) {
+                volSlider.onchange = function() {
+                    self.system.soundVolume = parseInt(volSlider.value);
+                    self.save();
+                    self.playSound('click');
+                };
+            }
+
+            var midBtn = root.querySelector('#setMidnightBtn');
+            if (midBtn) {
+                midBtn.onclick = function() {
+                    Helpers.setGameTimeToMidnight();
+                    self.playSound('notification');
+                    Notifications.warning("🌙 系统时间已调整至 00:00！午夜仪式条件已就绪", 3500);
+                    self.render();
+                };
+            }
+
+            var resetTimeBtn = root.querySelector('#resetTimeBtn');
+            if (resetTimeBtn) {
+                resetTimeBtn.onclick = function() {
+                    Helpers.resetGameTime();
+                    self.playSound('click');
+                    Notifications.info("🕒 已恢复真实系统时间", 2000);
+                    self.render();
+                };
+            }
+
+            var factoryBtn = root.querySelector('#factoryResetBtn');
+            if (factoryBtn) {
+                factoryBtn.onclick = function() {
+                    if (factoryBtn.getAttribute('data-confirm') !== '1') {
+                        factoryBtn.setAttribute('data-confirm', '1');
+                        factoryBtn.textContent = '⚠️ 再次点击确认清除所有结局';
+                        Notifications.warning("再次点击按钮将永久清除所有 16 个结局进度！", 3000);
+                        return;
+                    }
+                    localStorage.removeItem('pseudoEndings');
+                    localStorage.removeItem('pseudoSettings');
+                    localStorage.removeItem('pseudoPrediction');
+                    Notifications.error("🗑️ 所有数据已清除，正在重启...", 1500);
+                    setTimeout(function() { location.reload(); }, 1200);
+                };
+            }
+
+            root.querySelectorAll('.theme-option').forEach(function(el) {
+                el.onclick = function() {
+                    self.system.currentTheme = el.getAttribute('data-theme');
+                    self.save();
+                    self.applyTheme();
+                    self.playSound('click');
+                    self.render();
+                };
+            });
+
+            root.querySelectorAll('.color-option').forEach(function(el) {
+                el.onclick = function() {
+                    self.personalization.accentColor = el.getAttribute('data-color');
+                    self.save();
+                    self.applyAccentColor();
+                    self.playSound('click');
+                    self.render();
+                };
+            });
+
+            root.querySelectorAll('.avatar-option').forEach(function(el) {
+                el.onclick = function() {
+                    self.user.avatar = el.getAttribute('data-avatar');
+                    self.save();
+                    self.playSound('click');
+                    if (self._game) self._game.updateStartMenuUserInfo();
+                    self.render();
+                };
+            });
+
+            var saveAccBtn = root.querySelector('#saveAccountBtn');
+            if (saveAccBtn) {
+                saveAccBtn.onclick = function() {
+                    var n = root.querySelector('#userNameInput');
+                    var e = root.querySelector('#userEmailInput');
+                    if (n && n.value.trim()) self.user.name = n.value.trim();
+                    if (e && e.value.trim()) self.user.email = e.value.trim();
+                    self.save();
+                    self.playSound('success');
+                    Notifications.success("账号资料已更新", 2000);
+                    if (self._game) self._game.updateStartMenuUserInfo();
+                    self.render();
+                };
+            }
+        }
+    };
+
+    /* =====================================================================
+       7. 窗口管理器 WindowManager (修复 z-index 递增置顶与任务栏状态联动)
+    ===================================================================== */
+    var WindowManager = {
+        _windows: {},
+        _container: null,
+        _topZIndex: 120,
+
+        init: function(container) {
+            this._container = container || document.getElementById('windows-container');
+            this.createAllWindows();
+            var self = this;
+            setTimeout(function() {
+                self.initWindowDragAndResize();
+            }, 50);
+        },
+
+        createAllWindows: function() {
+            var windows = [
+                { id: 'email', title: '📧 邮件箱 - 内部收件箱' },
+                { id: 'browser', title: '🌐 伪人浏览器' },
+                { id: 'notepad', title: '📝 求职与预言记事本' },
+                { id: 'settings', title: '⚙️ Windows 设置' },
+                { id: 'security', title: '🛡️ Windows 安全中心' },
+                { id: 'achievements', title: '🏆 16 结局收集图鉴' },
+                { id: 'news', title: '📰 每日新闻客户端' },
+                { id: 'chat', title: '💬 家人微信群聊' }
+            ];
+
+            for (var i = 0; i < windows.length; i++) {
+                var win = windows[i];
+                var winEl = this.createWindow(win.id, win.title);
+                this._windows[win.id] = winEl;
+                this._container.appendChild(winEl);
+            }
+        },
+
+        createWindow: function(id, title) {
+            var win = document.createElement('div');
+            win.id = id + 'Window';
+            win.className = 'window resizable hidden';
+            win.setAttribute('data-win-id', id);
+
+            win.innerHTML = '<div class="window-header" data-drag-handle>' +
+                '<span>' + title + '</span>' +
+                '<div class="window-controls">' +
+                '<div class="window-btn resize-btn" title="重置窗口大小">🗖</div>' +
+                '<div class="window-btn close-win" title="关闭窗口">✕</div>' +
+                '</div>' +
+                '</div>' +
+                '<div class="window-content" id="' + id + 'Content"></div>' +
+                '<div class="resize-handle"></div>';
+
+            var self = this;
+            win.addEventListener('mousedown', function() {
+                self.bringToFront(id);
+            });
+
+            return win;
+        },
+
+        bringToFront: function(id) {
+            var win = this._windows[id];
+            if (!win) return;
+            this._topZIndex++;
+            win.style.zIndex = this._topZIndex;
+            this.updateTaskbarActive();
+        },
+
+        updateTaskbarActive: function() {
+            var self = this;
+            document.querySelectorAll('.task-icon').forEach(function(icon) {
+                var id = icon.getAttribute('data-win');
+                var win = self._windows[id];
+                if (win && !win.classList.contains('hidden')) {
+                    icon.classList.add('active');
+                } else {
+                    icon.classList.remove('active');
+                }
+            });
+        },
+
+        getWindow: function(id) { return this._windows[id]; },
+        getContent: function(id) {
+            var win = this._windows[id];
+            return win ? win.querySelector('.window-content') : null;
+        },
+
+        open: function(id, forceShow) {
+            var win = this._windows[id];
+            if (!win) return;
+
+            // 打开特定窗口时清除未读红点并刷新数据
+            if (id === 'email') {
+                var badge = document.getElementById('emailBadge');
+                if (badge) badge.classList.add('hidden');
+                if (window.Email) Email.render();
+            } else if (id === 'security') {
+                if (window.Security) Security.render();
+            } else if (id === 'achievements') {
+                if (window.Game) Game.renderAchievements();
+            } else if (id === 'news') {
+                var nBadge = document.getElementById('newsBadge');
+                if (nBadge) nBadge.classList.add('hidden');
+            } else if (id === 'chat') {
+                var cBadge = document.getElementById('chatBadge');
+                if (cBadge) cBadge.classList.add('hidden');
+                if (window.GlobalDoom) GlobalDoom.onChatWindowOpened();
+            }
+
+            if (win.classList.contains('hidden') || forceShow) {
+                win.classList.remove('hidden');
+                if (!win.style.left || win.style.left === 'auto') {
+                    var pos = Helpers.getRandomPosition(win.offsetWidth || 620, win.offsetHeight || 460);
+                    win.style.left = pos.left + 'px';
+                    win.style.top = pos.top + 'px';
+                }
+                this.bringToFront(id);
+            } else {
+                this.close(id);
+            }
+            this.updateTaskbarActive();
+        },
+
+        close: function(id) {
+            var win = this._windows[id];
+            if (win) {
+                win.classList.add('hidden');
+                this.updateTaskbarActive();
+            }
+        },
+
+        closeAll: function() {
+            for (var id in this._windows) {
+                if (this._windows[id]) this._windows[id].classList.add('hidden');
+            }
+            this.updateTaskbarActive();
+        },
+
+        initWindowDragAndResize: function() {
+            for (var id in this._windows) {
+                var win = this._windows[id];
+                if (win) {
+                    this.makeWindowDraggable(win);
+                    this.makeWindowResizable(win);
+                }
+            }
+        },
+
+        makeWindowDraggable: function(win) {
+            var header = win.querySelector('.window-header');
+            if (!header) return;
+            var dragData = { isDragging: false, startX: 0, startY: 0, startLeft: 0, startTop: 0 };
+
+            var startDrag = function(clientX, clientY) {
+                dragData.isDragging = true;
+                dragData.startX = clientX;
+                dragData.startY = clientY;
+                dragData.startLeft = win.offsetLeft;
+                dragData.startTop = win.offsetTop;
+            };
+
+            var moveDrag = function(clientX, clientY) {
+                if (!dragData.isDragging) return;
+                var newLeft = dragData.startLeft + (clientX - dragData.startX);
+                var newTop = dragData.startTop + (clientY - dragData.startY);
+                newLeft = Math.max(0, Math.min(newLeft, window.innerWidth - 120));
+                newTop = Math.max(0, Math.min(newTop, window.innerHeight - 80));
+                win.style.left = newLeft + 'px';
+                win.style.top = newTop + 'px';
+            };
+
+            header.addEventListener('mousedown', function(e) {
+                if (e.target.closest('.window-btn')) return;
+                startDrag(e.clientX, e.clientY);
+                var onMove = function(ev) { moveDrag(ev.clientX, ev.clientY); };
+                var onUp = function() {
+                    dragData.isDragging = false;
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                };
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+                e.preventDefault();
+            });
+
+            header.addEventListener('touchstart', function(e) {
+                if (e.target.closest('.window-btn')) return;
+                var t = e.touches[0];
+                startDrag(t.clientX, t.clientY);
+                var onTMove = function(ev) {
+                    var tt = ev.touches[0];
+                    moveDrag(tt.clientX, tt.clientY);
+                };
+                var onTEnd = function() {
+                    dragData.isDragging = false;
+                    document.removeEventListener('touchmove', onTMove);
+                    document.removeEventListener('touchend', onTEnd);
+                };
+                document.addEventListener('touchmove', onTMove, { passive: true });
+                document.addEventListener('touchend', onTEnd);
+            }, { passive: true });
+        },
+
+        makeWindowResizable: function(win) {
+            var handle = win.querySelector('.resize-handle');
+            var resizeBtn = win.querySelector('.resize-btn');
+            var closeBtn = win.querySelector('.close-win');
+            var self = this;
+
+            if (closeBtn) {
+                closeBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    self.close(win.getAttribute('data-win-id'));
+                };
+            }
+
+            if (resizeBtn) {
+                resizeBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    win.style.width = '640px';
+                    win.style.height = '480px';
+                    win.style.left = '18%';
+                    win.style.top = '12%';
+                };
+            }
+
+            if (handle) {
+                handle.addEventListener('mousedown', function(e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    var startX = e.clientX, startY = e.clientY;
+                    var startW = win.offsetWidth, startH = win.offsetHeight;
+                    var onMove = function(ev) {
+                        win.style.width = Math.max(340, Math.min(window.innerWidth - 40, startW + (ev.clientX - startX))) + 'px';
+                        win.style.height = Math.max(300, Math.min(window.innerHeight - 60, startH + (ev.clientY - startY))) + 'px';
+                    };
+                    var onUp = function() {
+                        document.removeEventListener('mousemove', onMove);
+                        document.removeEventListener('mouseup', onUp);
+                    };
+                    document.addEventListener('mousemove', onMove);
+                    document.addEventListener('mouseup', onUp);
+                });
+            }
+        }
+    };
+
+    /* =====================================================================
+       8. 安全中心模块 Security (统一使用 Settings.privacy 字段)
+    ===================================================================== */
+    var Security = {
+        _content: null,
+        _state: null,
+        _settings: null,
+        _game: null,
+
+        init: function(content, state, settings, game) {
+            this._content = content;
+            this._state = state;
+            this._settings = settings;
+            this._game = game;
+            this.render();
+        },
+
+        render: function() {
+            if (!this._content) return;
+            var self = this;
+            var p = this._settings.privacy;
+            var activeCount = (p.firewallEnabled ? 1 : 0) + (p.privacyEnabled ? 1 : 0) + (p.antivirusEnabled ? 1 : 0) + (p.dnsEnabled ? 1 : 0);
+
+            this._content.innerHTML = '<div class="security-status">' +
+                '<div style="display:flex;align-items:center;gap:12px;">' +
+                '<div style="font-size:32px;">' + (activeCount === 4 ? '🛡️' : (activeCount > 0 ? '⚠️' : '🚨')) + '</div>' +
+                '<div><div style="font-weight:bold;color:#ffaa66;">安全防护状态：' + activeCount + ' / 4 项已开启</div>' +
+                '<div style="font-size:12px;color:#aaa;">' + (activeCount === 4 ? '所有防护壁垒已就绪' : '部分防护未开启，系统易受伪人入侵') + '</div></div>' +
+                '</div>' +
+                '<button class="game-btn" id="openPrivacySettingsBtn" style="margin-top:0;">⚙️ 前往开启防护</button>' +
+                '</div>' +
+                '<button class="security-scan-btn" id="scanBtn">🔍 立即深度扫描系统威胁</button>' +
+                '<div id="scanResult"></div>';
+
+            var openSetBtn = document.getElementById('openPrivacySettingsBtn');
+            if (openSetBtn) {
+                openSetBtn.onclick = function() {
+                    Settings.currentPage = 'privacy';
+                    Settings.render();
+                    WindowManager.open('settings', true);
+                };
+            }
+
+            var scanBtn = document.getElementById('scanBtn');
+            if (scanBtn) {
+                scanBtn.onclick = function() { self.runScan(); };
+            }
+        },
+
+        runScan: function() {
+            var self = this;
+            var p = this._settings.privacy;
+            var scanResult = document.getElementById('scanResult');
+            if (!scanResult) return;
+
+            scanResult.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>正在深度扫描底层进程与网络连接...</p></div>';
+
+            setTimeout(function() {
+                var threats = [];
+                if (!p.firewallEnabled) threats.push("Windows 防火墙未开启 - 高危漏洞");
+                if (!p.privacyEnabled) threats.push("隐私保护模式未开启 - 生物信号暴露");
+                if (!p.antivirusEnabled) threats.push("实时病毒防护未开启 - 无法清除恶意进程");
+                if (!p.dnsEnabled) threats.push("DNS 加密未开启 - 网络追踪风险");
+                if (self._state.step >= 1) threats.push("检测到异常暗网招聘服务器残留连接");
+                if (self._state.step >= 2) threats.push("‼️ 检测到活跃的「伪人」意识入侵程序！");
+
+                if (threats.length === 0) {
+                    scanResult.innerHTML = '<div style="background: #1f4f38; padding: 14px; border-radius: 10px; margin-top: 12px; color: #ccffdd;">✅ 深度扫描完成，未发现任何威胁！</div>';
+                    Notifications.success("系统状态完全安全", 2500);
+                } else {
+                    var html = '<div style="background: #3a1c1c; padding: 14px; border-radius: 10px; margin-top: 12px;">' +
+                        '<strong style="color: #ff8888;">⚠️ 扫描发现 ' + threats.length + ' 项安全风险：</strong>';
+                    for (var i = 0; i < threats.length; i++) {
+                        html += '<div class="security-threat">• ' + threats[i] + '</div>';
+                    }
+                    if (p.antivirusEnabled) {
+                        html += '<button id="cleanBtn" class="security-scan-btn" style="margin-top: 10px; background: linear-gradient(135deg, #2e7d32, #1b5e20);">🧹 立即隔离并清除威胁</button>';
+                    } else {
+                        html += '<p style="margin-top: 10px; color: #ffaa66; font-size: 12px;">💡 提示：在「设置 → 隐私与安全」中开启【实时病毒防护】后即可清除威胁。</p>';
+                    }
+                    html += '</div>';
+                    scanResult.innerHTML = html;
+
+                    var cleanBtn = document.getElementById('cleanBtn');
+                    if (cleanBtn) {
+                        cleanBtn.onclick = function() {
+                            if (self._state.step >= 2 && p.firewallEnabled && p.antivirusEnabled && p.dnsEnabled && !self._state.gameEnded) {
+                                // 触发结局6：防火墙无敌！
+                                GameState.unlockEnding(6);
+                                Game.showEnding(6);
+                            } else {
+                                scanResult.innerHTML = '<div style="background: #1f4f38; padding: 14px; border-radius: 10px; margin-top: 12px;">🧹 已清理表面缓存威胁！若要彻底阻断伪人入侵，请确保【防火墙、病毒防护、DNS加密】全部开启。</div>';
+                                Notifications.success("已清理当前可清除的威胁", 3000);
+                            }
+                        };
+                    }
+                }
+            }, 1200);
+        }
+    };
+
+    /* =====================================================================
+       9. 记事本模块 Notepad (持久化预言内容 + 新增恢复理智互动)
+    ===================================================================== */
+    var Notepad = {
+        _content: null,
+        _state: null,
+        _game: null,
+        _coffeeUsed: false,
+
+        init: function(content, state, game) {
+            this._content = content;
+            this._state = state;
+            this._game = game;
+            this._coffeeUsed = false;
+            this.render();
+        },
+
+        render: function() {
+            if (!this._content) return;
+            var self = this;
+            var savedPred = this._game ? (this._game._predictionText || '') : '';
+
+            var html = '<div class="diary-entry"><strong>📓 个人求职与异常观察日记</strong></div>';
+
+            if (this._state.step >= 1) {
+                html += '<div class="diary-entry">⚠️ 我刚在暗网招聘站投递了简历……总觉得网页上的眼睛在盯着我。</div>';
+            }
+            if (this._state.step >= 2) {
+                html += '<div class="diary-entry" style="background:#4a2222;border-left-color:#ff4444;">‼️ 它们顺着网线进来了！屏幕开始闪烁，必须尽快采取对策！</div>';
+            }
+
+            html += '<div class="diary-entry" style="background:#203c32;">' +
+                '<strong style="color: #88ffbb;">📖 线索备忘录：</strong><br>' +
+                '1. 听说在浏览器搜索 <span style="color:#ffaa66;">「如何摆脱伪人」</span> 能找到古老的驱逐方法。<br>' +
+                '2. 保持头脑清醒时搜索 <span style="color:#88ccff;">「世界是程序」</span> 或许能看到底层真相。<br>' +
+                '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">' +
+                '<button class="game-btn" id="quickSearchHintBtn">🔍 去浏览器搜索驱逐方法</button>' +
+                '<button class="game-btn" id="drinkCoffeeBtn" style="background:#5a4228;" ' + (this._coffeeUsed ? 'disabled' : '') + '>' + (this._coffeeUsed ? '☕ 咖啡已喝完' : '☕ 喝杯热咖啡 (理智 +20%)') + '</button>' +
+                '</div>' +
+                '</div>' +
+                '<div class="diary-entry" style="background:#2f2448;border-left-color:#aa88ff;">' +
+                '<strong style="color: #ccaaff;">🔮 因果律预言笔记：</strong><br>' +
+                '<span style="font-size:12px;color:#ccc;">在入侵发生前写下你的预言（例如：<span style="color:#ffaa66;">伪人将会入侵</span>），若预言成真将触发隐藏结局！</span>' +
+                '<textarea id="predictionInput" placeholder="在此写下你的预言..." style="width:100%; height:62px; background:#182024; color:#eef4ff; border:1px solid #8866cc; border-radius:8px; padding:8px; margin-top:8px; resize:none;">' + savedPred + '</textarea>' +
+                '<button id="savePredictionBtn" class="game-btn" style="margin-top:8px;background:#5a3a8a;">📝 铭刻预言</button>' +
+                '</div>';
+
+            this._content.innerHTML = html;
+
+            var quickBtn = document.getElementById('quickSearchHintBtn');
+            if (quickBtn) {
+                quickBtn.onclick = function() {
+                    WindowManager.open('browser', true);
+                    if (window.Browser) Browser.renderGoogleHomepage('如何摆脱伪人');
+                };
+            }
+
+            var coffeeBtn = document.getElementById('drinkCoffeeBtn');
+            if (coffeeBtn && !this._coffeeUsed) {
+                coffeeBtn.onclick = function() {
+                    self._coffeeUsed = true;
+                    self._state.increaseSanity(20);
+                    Settings.playSound('success');
+                    Notifications.success("☕ 喝了一杯热咖啡，精神振作了许多！(理智 +20%)", 3000);
+                    self.render();
+                };
+            }
+
+            var saveBtn = document.getElementById('savePredictionBtn');
+            var input = document.getElementById('predictionInput');
+            if (saveBtn && input) {
+                saveBtn.onclick = function() {
+                    var text = input.value.trim();
+                    if (!text) {
+                        Notifications.warning("请先在文本框中写下预言内容", 2000);
+                        return;
+                    }
+                    self._game.setPrediction(text);
+                    Settings.playSound('success');
+                    Quest.update("🔮 预言已铭刻：「" + text + "」——等待命运应验...");
+                    self.render();
+                };
+            }
+        }
+    };
+
+    /* =====================================================================
+       10. 邮件模块 Email (支持多封邮件阅读追踪，修复结局10条件)
+    ===================================================================== */
+    var Email = {
+        _content: null,
+        _state: null,
+        _game: null,
+        _readIds: {},
+
+        init: function(content, state, game) {
+            this._content = content;
+            this._state = state;
+            this._game = game;
+            this._readIds = {};
+            this.render();
+        },
+
+        getAvailableEmails: function() {
+            var list = [
+                {
+                    id: 'sys_welcome',
+                    title: '📌 系统底层日志备份 [机密]',
+                    sender: 'archive@local-node.internal',
+                    tag: '已归档',
+                    body: '【异常观测记录 #049】<br>所谓“伪人”并非血肉生物，而是寄生在网络协议与视觉信号中的信息模因。当个体在深夜检索高薪招聘信息时，模因便会建立连接。切记：断网、三重系统防护、或古老的驱逐仪式是仅有的生还手段。'
+                }
+            ];
+            if (this._state.emailWarningReceived || this._state.step >= 1) {
+                list.unshift({
+                    id: 'warn_1',
+                    title: '⚠️ 紧急安全警告：恶意招聘站点追踪',
+                    sender: 'security@system-alert.net',
+                    tag: '高危警告',
+                    body: '您刚刚访问并投递简历的招聘网站已被全球安全组织标记为「伪人实体诱饵站」。<br>对方正在尝试采集您的生物特征与网络坐标！请立即断开网络连接，或在设置中开启全部安全防护！'
+                });
+            }
+            if (this._state.step >= 2) {
+                list.unshift({
+                    id: 'inv_2',
+                    title: '‼️ 入侵警报：异常意识已接入本机',
+                    sender: '0x000000@void.mirror',
+                    tag: '最高警报',
+                    body: '<span style="color:#ff8888;">检测到未知实体正在重写本地身份档案……<br>不要看屏幕反光里的自己。它已经站在你身后了。</span>'
+                });
+            }
+            return list;
+        },
+
+        render: function() {
+            if (!this._content) return;
+            var self = this;
+            var emails = this.getAvailableEmails();
+
+            var html = '<div style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">' +
+                '<strong style="color:#ffaa66;">📥 收件箱 (' + emails.length + ' 封邮件)</strong>' +
+                '<span style="font-size:11px;color:#aaa;">点击邮件展开阅读全文</span></div>';
+
+            for (var i = 0; i < emails.length; i++) {
+                var em = emails[i];
+                var isRead = !!this._readIds[em.id];
+                html += '<div class="email-item" data-em-id="' + em.id + '" style="' + (em.id === 'inv_2' ? 'background:#3d1e1e;border-left-color:#ff4444;' : '') + '">' +
+                    '<div><strong>' + em.title + '</strong>' +
+                    (!isRead ? '<span class="email-unread-tag">未读</span>' : '<span style="font-size:11px;color:#88ffaa;margin-left:6px;">✓ 已读</span>') +
+                    '</div>' +
+                    '<div style="font-size:11px;color:#aaa;margin:4px 0;">发件人: ' + em.sender + '</div>' +
+                    '<div class="email-body" style="margin-top:8px;font-size:13px;color:#e6eef8;">' + em.body + '</div>' +
+                    '</div>';
+            }
+
+            this._content.innerHTML = html;
+
+            this._content.querySelectorAll('.email-item').forEach(function(item) {
+                item.onclick = function() {
+                    var id = item.getAttribute('data-em-id');
+                    self._readIds[id] = true;
+                    Settings.playSound('click');
+                    self.checkAllEmailsRead();
+                    self.render();
+                };
+            });
+        },
+
+        checkAllEmailsRead: function() {
+            var emails = this.getAvailableEmails();
+            var allRead = emails.every(function(em) { return !!Email._readIds[em.id]; });
+            if (allRead && this._game) {
+                this._game.markEmailsRead();
+            }
+        },
+
+        sendWarning: function() {
+            this._state.emailWarningReceived = true;
+            var badge = document.getElementById('emailBadge');
+            if (badge) {
+                badge.textContent = '1';
+                badge.classList.remove('hidden');
+            }
+            this.render();
+            Notifications.warning("📧 收到一封紧急安全警告邮件！", 3500);
+        }
+    };
+
+    /* =====================================================================
+       11. 浏览器模块 Browser (支持快捷搜索、完整驱逐仪式与午夜古老契约)
+    ===================================================================== */
+    var Browser = {
+        _content: null,
+        _state: null,
+        _onJobApply: null,
+        _game: null,
+
+        init: function(content, state, onJobApply, game) {
+            this._content = content;
+            this._state = state;
+            this._onJobApply = onJobApply;
+            this._game = game;
+            if (this._content) this.renderGoogleHomepage();
+        },
+
+        renderGoogleHomepage: function(prefillQuery) {
+            if (!this._content) return;
+            if (!this._state.isOnline) {
+                this.showOfflineMessage();
+                return;
+            }
+
+            var self = this;
+            var defaultVal = prefillQuery !== undefined ? prefillQuery : '高薪工作应聘网站';
+
+            this._content.innerHTML = '<div class="search-container">' +
+                '<div style="text-align: center; margin-bottom: 10px;">' +
+                '<span style="font-size: 44px;">🔍</span>' +
+                '<div style="font-size: 26px; font-weight: bold; margin-top: 4px; letter-spacing: 2px;">' +
+                '<span style="color: #4285f4;">深</span>' +
+                '<span style="color: #ea4335;">网</span>' +
+                '<span style="color: #fbbc05;">检</span>' +
+                '<span style="color: #34a853;">索</span>' +
+                '</div></div>' +
+                '<div class="search-box">' +
+                '<input type="text" class="search-input" id="searchInput" placeholder="输入关键词搜索..." value="' + defaultVal + '">' +
+                '<button class="search-btn" id="searchBtn">搜索</button>' +
+                '</div>' +
+                '<div style="font-size:12px;color:#aaa;margin-top:8px;">💡 点击下方快捷词条或输入自定义关键词：</div>' +
+                '<div class="quick-keywords">' +
+                '<span class="keyword-chip" data-q="高薪工作应聘网站">💼 高薪工作应聘网站</span>' +
+                '<span class="keyword-chip" data-q="如何摆脱伪人">📜 如何摆脱伪人</span>' +
+                '<span class="keyword-chip" data-q="世界是程序">💻 世界是程序</span>' +
+                '<span class="keyword-chip" data-q="伪人弱点档案">👁️ 伪人弱点档案</span>' +
+                '</div></div>';
+
+            var searchBtn = document.getElementById('searchBtn');
+            var searchInput = document.getElementById('searchInput');
+
+            var doSearch = function(customQ) {
+                if (!self._state.isOnline) { self.showOfflineMessage(); return; }
+                var query = (customQ !== undefined ? customQ : (searchInput ? searchInput.value : '')).trim();
+                Settings.playSound('click');
+
+                if (self._game && query) {
+                    self._game.addSearchCount(query);
+                }
+
+                if (query.indexOf('高薪工作') !== -1 || query.indexOf('应聘') !== -1) {
+                    self.showSearchLoading();
+                } else if (query.indexOf('摆脱伪人') !== -1 || query.indexOf('驱逐伪人') !== -1) {
+                    self.showSecretPage();
+                } else if (query.indexOf('世界是程序') !== -1 || query.indexOf('代码真相') !== -1) {
+                    self.showCodeTruthPage();
+                } else {
+                    self.showNormalSearch(query);
+                }
+            };
+
+            if (searchBtn) searchBtn.onclick = function() { doSearch(); };
+            if (searchInput) {
+                searchInput.onkeypress = function(e) { if (e.key === 'Enter') doSearch(); };
+            }
+            this._content.querySelectorAll('.keyword-chip').forEach(function(chip) {
+                chip.onclick = function() {
+                    var q = chip.getAttribute('data-q');
+                    if (searchInput) searchInput.value = q;
+                    doSearch(q);
+                };
+            });
+        },
+
+        showNormalSearch: function(query) {
+            var self = this;
+            if (!query) {
+                Notifications.warning("请输入搜索关键词", 2000);
+                return;
+            }
+            this._content.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>正在检索 "' + query + '"...</p></div>';
+            setTimeout(function() {
+                var extraInfo = query.indexOf('伪人') !== -1
+                    ? '<div class="diary-entry" style="background:#263b3b;"><strong>👁️ 匿名帖：伪人特征记录</strong><br>伪人模仿人类时往往无法理解真实的情感波动，它们害怕被切断网络连接，也畏惧古老的驱逐仪式。</div>'
+                    : '<p>未找到更多公开记录，但你的搜索行为已被记录。</p>';
+                self._content.innerHTML = '<div style="padding: 16px;">' +
+                    '<h3 style="color:#ffaa66;margin-bottom:10px;">🔍 搜索结果：「' + query + '」</h3>' +
+                    extraInfo +
+                    '<button class="game-btn" id="backToSearch">← 返回搜索主页</button>' +
+                    '</div>';
+                var backBtn = document.getElementById('backToSearch');
+                if (backBtn) backBtn.onclick = function() { self.renderGoogleHomepage(''); };
+            }, 800);
+        },
+
+        showSecretPage: function() {
+            var self = this;
+            this._state.secretSearchUnlocked = true;
+            if (this._game && this._game.addAncientBook) {
+                this._game.addAncientBook("驱逐伪人古籍");
+            }
+
+            var p = Settings.privacy;
+            var allReady = p.firewallEnabled && p.antivirusEnabled && p.dnsEnabled;
+            var now = Helpers.getCurrentGameTime();
+            var isMidnight = (now.getHours() === 23 && now.getMinutes() >= 55) || (now.getHours() === 0 && now.getMinutes() <= 5);
+
+            this._content.innerHTML = '<div style="padding: 14px;">' +
+                '<div style="background: #233d32; border-radius: 12px; padding: 18px; border: 1px solid #ffaa66;">' +
+                '<h3 style="color: #ffaa66;">📜 禁忌古籍：如何驱逐伪人</h3>' +
+                '<div style="margin: 14px 0; line-height: 1.75; color: #eef4ff; font-size: 13px;">' +
+                '<p>伪人是寄生在数字世界夹缝中的异常存在。要将其彻底驱逐，必须同时满足以下条件：</p>' +
+                '<ol style="margin: 10px 0 10px 22px;">' +
+                '<li>📖 查阅古籍真言（✅ 已完成）</li>' +
+                '<li>🛡️ 防火墙状态：' + (p.firewallEnabled ? '<span style="color:#88ffaa;">✅ 已开启</span>' : '<span style="color:#ff8888;">❌ 未开启</span>') + '</li>' +
+                '<li>🦠 病毒防护状态：' + (p.antivirusEnabled ? '<span style="color:#88ffaa;">✅ 已开启</span>' : '<span style="color:#ff8888;">❌ 未开启</span>') + '</li>' +
+                '<li>🔐 DNS 加密状态：' + (p.dnsEnabled ? '<span style="color:#88ffaa;">✅ 已开启</span>' : '<span style="color:#ff8888;">❌ 未开启</span>') + '</li>' +
+                '</ol>' +
+                '<p style="color: #ccaaff; font-size: 12px;">🌙 隐藏提示：当前系统时间为 <strong>' + now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0') + '</strong>' + (isMidnight ? '（✨ 正值午夜 00:00，执行仪式将触发【古老契约】！）' : '（若在设置中将时间调至 00:00 再执行，可触发隐藏结局）') + '</p>' +
+                '</div>' +
+                '<button class="apply-btn" id="performRitualBtn" style="background: linear-gradient(135deg, #3a7a4a, #245230);">✨ 念出咒语并执行驱逐仪式 ✨</button>' +
+                '<div style="display:flex;gap:10px;margin-top:10px;">' +
+                (!allReady ? '<button class="game-btn" id="goEnableSecBtn" style="flex:1;">⚙️ 前往设置开启全部防护</button>' : '') +
+                '<button class="game-btn" id="backToSearchBtn" style="flex:1;">← 返回搜索</button>' +
+                '</div>' +
+                '</div></div>';
+
+            var goSec = document.getElementById('goEnableSecBtn');
+            if (goSec) {
+                goSec.onclick = function() {
+                    Settings.currentPage = 'privacy';
+                    Settings.render();
+                    WindowManager.open('settings', true);
+                };
+            }
+
+            var ritualBtn = document.getElementById('performRitualBtn');
+            if (ritualBtn) {
+                ritualBtn.onclick = function() {
+                    var curNow = Helpers.getCurrentGameTime();
+                    var midnightNow = (curNow.getHours() === 23 && curNow.getMinutes() >= 55) || (curNow.getHours() === 0 && curNow.getMinutes() <= 5);
+
+                    // 优先判断隐藏结局 15：古老契约（发现古籍 + 午夜00:00执行仪式）
+                    if (midnightNow && !self._state.gameEnded) {
+                        GameState.unlockEnding(15);
+                        if (window.Game) Game.showEnding(15);
+                        return;
+                    }
+
+                    // 判断好结局 7：驱逐仪式（全防护 + 执行仪式）
+                    if (Settings.privacy.firewallEnabled && Settings.privacy.antivirusEnabled && Settings.privacy.dnsEnabled) {
+                        GameState.unlockEnding(7);
+                        if (window.Game) Game.showEnding(7);
+                    } else {
+                        Settings.playSound('error');
+                        Notifications.warning("⚠️ 仪式反噬！请先在「设置 → 隐私与安全」开启防火墙、病毒防护与 DNS 加密", 4000);
+                        self._state.reduceSanity(10);
+                    }
+                };
+            }
+
+            var backBtn = document.getElementById('backToSearchBtn');
+            if (backBtn) backBtn.onclick = function() { self.renderGoogleHomepage(''); };
+        },
+
+        showCodeTruthPage: function() {
+            var self = this;
+            var isFullSanity = this._state.sanity === 100;
+            this._content.innerHTML = '<div style="padding: 16px;">' +
+                '<div style="background: #1e354d; border-radius: 12px; padding: 18px; border: 1px solid #88aaff;">' +
+                '<h3 style="color: #88aaff;">💻 底层源代码真相</h3>' +
+                '<code style="display:block; background:#111b24; padding:14px; border-radius:8px; margin:14px 0; font-family: monospace; color:#aaddff; line-height:1.7;">' +
+                '// SYSTEM_WORLD_ENGINE v1.0<br>' +
+                '// 伪人 = 异常内存回收守护进程<br>' +
+                '// 当前观测者理智值: ' + this._state.sanity + '%<br>' +
+                '// 状态: ' + (isFullSanity ? '完全清醒 - 权限已解锁' : '认知已受污染 - 无法解析完整代码') +
+                '</code>' +
+                (isFullSanity
+                    ? '<button class="apply-btn" id="awakenCodeBtn" style="background:linear-gradient(135deg,#3366aa,#1e4477);">🔓 解析世界真相</button>'
+                    : '<p style="color:#ff9988;font-size:12px;">⚠️ 只有在理智值 100% 时才能完全理解这段代码（可去记事本喝咖啡恢复理智，或重开一局直接搜索）。</p>') +
+                '<button class="game-btn" id="backToSearchBtn">← 返回搜索</button>' +
+                '</div></div>';
+
+            var awakenBtn = document.getElementById('awakenCodeBtn');
+            if (awakenBtn) {
+                awakenBtn.onclick = function() {
+                    if (self._game) self._game.checkCodeTruth();
+                };
+            }
+            var backBtn = document.getElementById('backToSearchBtn');
+            if (backBtn) backBtn.onclick = function() { self.renderGoogleHomepage(''); };
+        },
+
+        showSearchLoading: function() {
+            var self = this;
+            this._content.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>正在连接暗网高薪招聘节点...</p></div>';
+            setTimeout(function() { self.showSearchResults(); }, 900);
+        },
+
+        showSearchResults: function() {
+            var self = this;
+            this._content.innerHTML = '<div style="padding: 12px;">' +
+                '<div style="color: #88aaff; margin-bottom: 12px; font-size: 12px;">找到 1 个高匹配度暗网招聘入口 (0.19 秒)</div>' +
+                '<div class="job-item" id="searchResultItem">' +
+                '<div style="color: #ffaa66; font-size: 17px; font-weight: bold;">⚠️ 异常高薪工作招聘网 - 伪人专属通道</div>' +
+                '<div style="color: #88ffaa; font-size: 12px; margin-top:4px;">https://pseudo-jobs.darkweb/urgent-hire</div>' +
+                '<div style="color: #ccc; margin-top: 8px; font-size: 13px;">日结高薪！无需学历经验！点击查看当前急招职位列表...</div>' +
+                '</div>' +
+                '<button class="game-btn" id="backHomeBtn">← 返回搜索</button>' +
+                '</div>';
+            document.getElementById('searchResultItem').onclick = function() { self.showJobListings(); };
+            document.getElementById('backHomeBtn').onclick = function() { self.renderGoogleHomepage(''); };
+        },
+
+        showJobListings: function() {
+            var self = this;
+            var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+                '<h3 style="color:#ffaa66;">⚠️ 暗网高薪职位列表</h3>' +
+                '<button class="game-btn" id="backToSearchTop" style="margin-top:0;padding:5px 12px;font-size:12px;">← 返回搜索</button></div>';
+
+            for (var i = 0; i < GameState.jobs.length; i++) {
+                var job = GameState.jobs[i];
+                html += '<div class="job-item" data-job-id="' + job.id + '">' +
+                    '<div style="display:flex;justify-content:space-between;">' +
+                    '<strong style="font-size: 15px; color: #ffbb88;">' + job.title + '</strong>' +
+                    '<span style="font-size: 11px; color: #ff8888;">危险等级: ' + job.danger + '</span></div>' +
+                    '<div style="font-size: 12px; color: #bbb; margin-top:4px;">' + job.company + ' | ' + job.salary + '</div>' +
+                    '</div>';
+            }
+            this._content.innerHTML = html;
+
+            document.getElementById('backToSearchTop').onclick = function() { self.renderGoogleHomepage(''); };
+            this._content.querySelectorAll('.job-item').forEach(function(el) {
+                el.onclick = function() {
+                    var job = GameState.getJob(parseInt(el.getAttribute('data-job-id')));
+                    if (job) self.showJobDetail(job);
+                };
+            });
+        },
+
+        showJobDetail: function(job) {
+            var self = this;
+            this._content.innerHTML = '<div style="padding: 6px;">' +
+                '<h3 style="color: #ffaa66; margin-bottom: 10px;">' + job.title + '</h3>' +
+                '<p style="margin:6px 0;"><strong>🏢 发布机构：</strong>' + job.company + '</p>' +
+                '<p style="margin:6px 0;"><strong>💰 薪资待遇：</strong>' + job.salary + '</p>' +
+                '<p style="margin:6px 0;"><strong>⚠️ 危险等级：</strong><span style="color:#ff8888;">' + job.danger + '</span></p>' +
+                '<p style="margin:6px 0;"><strong>📋 职位描述：</strong>' + job.desc + '</p>' +
+                '<div style="background: #182424; padding: 12px; margin: 12px 0; border-radius: 8px; font-size: 12px; border: 1px solid #4a6a6a;">' +
+                (job.id === 2
+                    ? '📷 <strong>特殊验证要求：</strong>此职位需要开启设备摄像头进行实时生物面容识别（拒绝多次可能会引发未知异常）。'
+                    : '⚠️ <strong>内部备注：</strong>已有数名入职者失去联系，提交简历后系统将建立双向数据连接。') +
+                '</div>' +
+                '<button class="apply-btn" id="applyJobBtn">📩 立即投递简历并应聘</button>' +
+                '<button class="game-btn" id="backToJobsBtn" style="width:100%;">← 返回职位列表</button>' +
+                '</div>';
+
+            document.getElementById('applyJobBtn').onclick = function() { self._onJobApply(job); };
+            document.getElementById('backToJobsBtn').onclick = function() { self.showJobListings(); };
+        },
+
+        showApplyResult: function(job) {
+            var self = this;
+            this._content.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>正在向服务器传输个人生物简历...</p></div>';
+            setTimeout(function() {
+                self._content.innerHTML = '<div style="background:#2d2020; padding:20px; border-radius:12px; border-left:4px solid #ff6666;">' +
+                    '<h3 style="color:#ff8888;margin-bottom:10px;">⚠️ 异常连接警告</h3>' +
+                    '<p style="color: #eef4ff; line-height:1.6;">简历已接收！对方服务器正在反向扫描你的设备端口并尝试接入桌面……<br>你可以选择继续查看后台详情，或者立即前往「邮件箱」查看安全警告。</p>' +
+                    '<div style="display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap;">' +
+                    '<button class="game-btn" id="continueInvasion" style="background: #8b1a1a; flex:1;">⚠️ 深入查看对方服务器</button>' +
+                    '<button class="game-btn" id="backToJobsAfterApply" style="flex:1;">📋 返回职位列表</button>' +
+                    '</div></div>';
+
+                document.getElementById('continueInvasion').onclick = function() {
+                    if (window.Game) window.Game.escalateToInvasion();
+                };
+                document.getElementById('backToJobsAfterApply').onclick = function() {
+                    self.showJobListings();
+                };
+            }, 900);
+        },
+
+        showOfflineMessage: function() {
+            var self = this;
+            this._content.innerHTML = '<div style="text-align:center; padding:50px 20px;">' +
+                '<div style="font-size:48px;margin-bottom:12px;">🔌</div>' +
+                '<h3 style="color: #eef4ff;margin-bottom:8px;">网络已断开</h3>' +
+                '<p style="color:#aaa;font-size:13px;margin-bottom:18px;">当前处于离线保护状态，外部信号无法连入。</p>' +
+                '<button class="game-btn" id="retryNetworkBtn">🌐 重新连接网络</button></div>';
+            document.getElementById('retryNetworkBtn').onclick = function() {
+                GameState.isOnline = true;
+                if (window.Game) window.Game.updateNetworkUI();
+                self.renderGoogleHomepage();
+            };
+        }
+    };
+
+    /* =====================================================================
+       12. 紧急新闻与家人群聊模块 GlobalDoom (修复结局8/16触发与红点提醒)
+    ===================================================================== */
+    var GlobalDoom = {
+        _state: null,
+        _newsWin: null,
+        _chatWin: null,
+        _newsContent: null,
+        _chatContent: null,
+        _chatMessages: [],
+        _newsMessages: [],
+        _chatMessageInterval: null,
+        _sanityCheckInterval: null,
+        _chatTriggered: false,
+        _isGoodEndingChat: false,
+        _isDoomEndingChat: false,
+        _game: null,
+
+        init: function(state, newsWin, chatWin, newsContent, chatContent, game) {
+            this._state = state;
+            this._newsWin = newsWin;
+            this._chatWin = chatWin;
+            this._newsContent = newsContent;
+            this._chatContent = chatContent;
+            this._game = game;
+            this._chatTriggered = false;
+            this._isGoodEndingChat = false;
+            this._isDoomEndingChat = false;
+
+            this.initNormalNews();
+            this.initNormalChat();
+            this.startSanityCheck();
+        },
+
+        startSanityCheck: function() {
+            var self = this;
+            if (this._sanityCheckInterval) clearInterval(this._sanityCheckInterval);
+            this._sanityCheckInterval = setInterval(function() {
+                if (!self._state.gameEnded &&
+                    !self._state.globalDoomTriggered &&
+                    self._state.step >= 1 &&
+                    self._state.sanity <= 80 &&
+                    self._state.sanity > 0) {
+                    self.triggerNews();
+                }
+            }, 1000);
+        },
+
+        initNormalNews: function() {
+            this._newsMessages = [
+                { title: "🌤️ 晚间天气预报", content: "今夜局部有大雾，能见度较低，建议市民减少深夜外出。", time: "21:00" },
+                { title: "💻 网络安全提醒", content: "近期出现多起虚假高薪招聘诈骗，请勿随意开启摄像头验证。", time: "22:15" },
+                { title: "🎬 都市奇谈专栏", content: "都市传说《伪人》引发热议，专家称纯属虚构。", time: "23:10" }
+            ];
+            this.renderNewsContent(false);
+        },
+
+        renderNewsContent: function(isHorror) {
+            if (!this._newsContent) return;
+            var self = this;
+
+            if (!isHorror) {
+                var html = '<div>';
+                for (var i = 0; i < this._newsMessages.length; i++) {
+                    var n = this._newsMessages[i];
+                    html += '<div style="background: #283636; padding: 12px; margin: 8px 0; border-radius: 10px; border-left: 4px solid #ffaa66;">' +
+                        '<div style="color: #ffaa66; font-weight: bold;">' + n.title + ' <span style="float:right;color:#888;font-size:11px;">' + n.time + '</span></div>' +
+                        '<p style="color: #eef4ff; margin-top: 6px; font-size:13px;">' + n.content + '</p></div>';
+                }
+                html += '</div>';
+                this._newsContent.innerHTML = html;
+            } else {
+                this._newsContent.innerHTML = '<div style="background: #421c1c; padding: 18px; border-radius: 12px; border-left: 4px solid #ff4444;">' +
+                    '<h3 style="color: #ff8888; margin-bottom:10px;">🚨 突发紧急新闻快报 🚨</h3>' +
+                    '<p style="color: #eef4ff; line-height: 1.65; font-size:14px;">据应急部门通报，本市多个社区出现异常“身份替换”事件！目击者称有未知实体正通过家用电脑与手机网络向家庭成员渗透！</p>' +
+                    '<p style="color: #ffbb66; margin-top: 10px; font-size:13px;">⚠️ 你的父母和妹妹此刻正独自在家！你打算怎么做？</p>' +
+                    '<div style="display: flex; gap: 12px; margin-top: 18px;">' +
+                    '<button class="game-btn" id="goodEndingBtn" style="background: #246a44; flex:1; font-weight:bold;">🏠 立即在群里提醒家人</button>' +
+                    '<button class="game-btn" id="doomEndingBtn" style="background: #7a1c1c; flex:1; font-weight:bold;">💀 别管了，继续工作</button>' +
+                    '</div></div>';
+
+                document.getElementById('goodEndingBtn').onclick = function() {
+                    WindowManager.close('news');
+                    self._isGoodEndingChat = true;
+                    self._isDoomEndingChat = false;
+                    var cBadge = document.getElementById('chatBadge');
+                    if (cBadge) cBadge.classList.remove('hidden');
+                    Settings.playSound('notification');
+                    Quest.update("🏠 你决定提醒家人！请打开桌面「家人群聊」查看回复...");
+                };
+
+                document.getElementById('doomEndingBtn').onclick = function() {
+                    WindowManager.close('news');
+                    self._isDoomEndingChat = true;
+                    self._isGoodEndingChat = false;
+                    var cBadge = document.getElementById('chatBadge');
+                    if (cBadge) cBadge.classList.remove('hidden');
+                    Settings.playSound('error');
+                    Quest.update("💀 你选择冷漠地继续工作...打开「家人群聊」看看发生了什么？");
+                };
+            }
+        },
+
+        initNormalChat: function() {
+            this._chatMessages = [];
+            var normalMessages = [
+                { sender: "妈妈", text: "😊 儿子，这么晚还在电脑前找工作呀？注意休息。", time: "22:30" },
+                { sender: "爸爸", text: "💼 别太着急，遇到要求交钱或者开摄像头的网站千万别信。", time: "22:32" },
+                { sender: "妹妹", text: "🎮 哥哥，我刚打通恐怖游戏，吓死我啦！", time: "22:35" }
+            ];
+            for (var i = 0; i < normalMessages.length; i++) {
+                this.appendChatBubble(normalMessages[i].sender, normalMessages[i].text, normalMessages[i].time, '#324242');
+            }
+            this.renderChatContent();
+        },
+
+        appendChatBubble: function(sender, text, time, bg) {
+            var html = '<div class="chat-message">' +
+                '<span class="chat-sender">' + sender + ':</span><br>' +
+                '<div class="chat-bubble" style="background:' + bg + ';">' +
+                '<span>' + text + '</span>' +
+                '<div style="font-size: 10px; color: #aaa; margin-top: 3px;">' + time + '</div>' +
+                '</div></div>';
+            this._chatMessages.push(html);
+        },
+
+        renderChatContent: function() {
+            if (!this._chatContent) return;
+            var html = '<div style="background: #222e2e; border-radius: 12px; overflow: hidden; border: 1px solid #4a6a6a;">' +
+                '<div style="background: #1e5a38; padding: 10px 14px; color: white; font-size:13px; font-weight:bold;">' +
+                '👨‍👩‍👧‍👦 相亲相爱一家人 (4人)</div>' +
+                '<div id="chatMessagesArea" style="height: 310px; overflow-y: auto; padding: 14px; background: #182222;">' +
+                this._chatMessages.join('') +
+                '</div></div>';
+            this._chatContent.innerHTML = html;
+            var area = document.getElementById('chatMessagesArea');
+            if (area) area.scrollTop = area.scrollHeight;
+        },
+
+        onChatWindowOpened: function() {
+            if (this._chatTriggered || this._state.gameEnded) return;
+            if (this._isGoodEndingChat && this._state.globalDoomTriggered) {
+                this._chatTriggered = true;
+                this.startDialogueSequence(true);
+            } else if (this._isDoomEndingChat && this._state.globalDoomTriggered) {
+                this._chatTriggered = true;
+                this.startDialogueSequence(false);
+            }
+        },
+
+        startDialogueSequence: function(isGood) {
+            var self = this;
+            var seq = isGood ? [
+                { sender: "你", text: "‼️ 爸妈、妹妹！快把家里的电脑和路由器电源全拔了！新闻说伪人正在顺着网络入侵！", time: "23:54", bg: "#245a42" },
+                { sender: "妈妈", text: "😨 啊？！我刚看到新闻弹窗了！你那边没事吧？", time: "23:55", bg: "#26523c" },
+                { sender: "爸爸", text: "⚠️ 我已经把总闸和宽带全断了，正带着你妈和妹妹往楼下安全点撤离！", time: "23:56", bg: "#26523c" },
+                { sender: "妹妹", text: "❤️ 哥哥我们也到楼下了，你快关掉电脑下来和我们汇合！", time: "23:57", bg: "#26523c" }
+            ] : [
+                { sender: "妈妈", text: "😈 儿子……你怎么还不回家？", time: "23:55", bg: "#4a2020" },
+                { sender: "爸爸", text: "👁️ 别再盯着招聘网页了……我们都已经变成了一样的呢。", time: "23:56", bg: "#4a2020" },
+                { sender: "妹妹", text: "👤 哥哥，门已经打开了，快来陪我们吧 ( ՞ټ՞ )", time: "23:57", bg: "#4a2020" },
+                { sender: "妈妈", text: " ( ՞ټ՞ )  ( ՞ټ՞ )  ( ՞ټ՞ ) ", time: "23:58", bg: "#4a2020" }
+            ];
+
+            var idx = 0;
+            if (this._chatMessageInterval) clearInterval(this._chatMessageInterval);
+
+            this._chatMessageInterval = setInterval(function() {
+                if (self._state.gameEnded) {
+                    clearInterval(self._chatMessageInterval);
+                    return;
+                }
+                if (idx < seq.length) {
+                    var m = seq[idx++];
+                    self.appendChatBubble(m.sender, m.text, m.time, m.bg);
+                    Settings.playSound(isGood ? 'notification' : 'error');
+                    var area = document.getElementById('chatMessagesArea');
+                    if (area) {
+                        area.innerHTML = self._chatMessages.join('');
+                        area.scrollTop = area.scrollHeight;
+                    }
+                } else {
+                    clearInterval(self._chatMessageInterval);
+                    setTimeout(function() {
+                        if (!self._state.gameEnded) {
+                            var endId = isGood ? 8 : 16;
+                            self._state.unlockEnding(endId);
+                            if (window.Game) window.Game.showEnding(endId);
+                        }
+                    }, 900);
+                }
+            }, 1300);
+        },
+
+        triggerNews: function() {
+            if (this._state.globalDoomTriggered || this._state.gameEnded) return;
+            this._state.globalDoomTriggered = true;
+            Settings.playSound('error');
+            Notifications.error("📰 突发紧急新闻！全城出现大规模异常失踪事件！", 4500);
+            Quest.update("📰 紧急新闻弹窗！请仔细阅读新闻并做出抉择...");
+            this.renderNewsContent(true);
+            WindowManager.open('news', true);
+        },
+
+        cleanup: function() {
+            if (this._chatMessageInterval) clearInterval(this._chatMessageInterval);
+            if (this._sanityCheckInterval) clearInterval(this._sanityCheckInterval);
+        }
+    };
+
+    /* =====================================================================
+       13. 游戏主控制器 Game
+    ===================================================================== */
+    var Game = {
+        _state: null,
+        _settings: null,
+        _windowManager: null,
+        _browser: null,
+        _email: null,
+        _notepad: null,
+        _security: null,
+        _globalDoom: null,
+        _clockInterval: null,
+        _sanityDeathCheckInterval: null,
+        _sanityDrainInterval: null,
+
+        _cameraDenyCount: 0,
+        _searchCount: 0,
+        _toggleCount: 0,
+        _ancientBooksFound: [],
+        _predictionText: '',
+        _emailsRead: false,
+
+        init: function() {
+            Notifications.init();
+            Quest.init(document.getElementById('questText'));
+
+            this._windowManager = WindowManager;
+            this._windowManager.init();
+
+            this._state = GameState;
+            this._state.load();
+
+            this._settings = Settings;
+            this._settings.init(this._windowManager.getContent('settings'), this);
+
+            this._browser = Browser;
+            this._browser.init(this._windowManager.getContent('browser'), this._state, this.applyForJob.bind(this), this);
+
+            this._email = Email;
+            this._email.init(this._windowManager.getContent('email'), this._state, this);
+
+            this._notepad = Notepad;
+            this._notepad.init(this._windowManager.getContent('notepad'), this._state, this);
+
+            this._security = Security;
+            this._security.init(this._windowManager.getContent('security'), this._state, this._settings, this);
+
+            this._globalDoom = GlobalDoom;
+            this._globalDoom.init(
+                this._state,
+                this._windowManager.getWindow('news'),
+                this._windowManager.getWindow('chat'),
+                this._windowManager.getContent('news'),
+                this._windowManager.getContent('chat'),
+                this
+            );
+
+            this.renderAchievements();
+            this.bindUIEvents();
+            this.startClock();
+            this.checkMobile();
+            this.startSanityDrain();
+            this.startSanityDeathCheck();
+            this.updateNetworkUI();
+            this.updateEndingProgress();
+            this.renderStartMenuApps();
+            this.updateStartMenuUserInfo();
+
+            window.Game = this;
+        },
+
+        markEmailsRead: function() {
+            this._emailsRead = true;
+            this.checkTruthEnding();
+        },
+
+        checkTruthEnding: function() {
+            // 结局10：阅读全部邮件 + 累计解锁 3 个好结局 (6~10)
+            if (this._emailsRead && this._state.getGoodEndingsCount() >= 3 && !this._state.gameEnded) {
+                this._state.unlockEnding(10);
+                this.showEnding(10);
+            }
+        },
+
+        addSearchCount: function() {
+            this._searchCount++;
+            // 搜索时略微消耗理智，增强紧迫感（首次搜索保持100%以便触发结局14代码真相）
+            if (this._searchCount > 1 && this._state.step >= 1) {
+                this._state.reduceSanity(15);
+            }
+            if (this._searchCount >= 3 && !this._state.gameEnded && !this._state.isEndingUnlocked(9)) {
+                this._state.unlockEnding(9);
+                this.showEnding(9);
+            }
+        },
+
+        addToggleCount: function() {
+            this._toggleCount++;
+            // 结局11：理智值在 40%~60% 之间开关防护 3 次
+            if (this._toggleCount >= 3 && this._state.sanity >= 40 && this._state.sanity <= 60 && !this._state.gameEnded) {
+                this._state.unlockEnding(11);
+                this.showEnding(11);
+            }
+        },
+
+        addAncientBook: function(bookName) {
+            if (this._ancientBooksFound.indexOf(bookName) === -1) {
+                this._ancientBooksFound.push(bookName);
+            }
+        },
+
+        setPrediction: function(text) {
+            this._predictionText = text;
+        },
+
+        checkPrediction: function() {
+            if (!this._predictionText) return false;
+            if ((this._predictionText.indexOf("入侵") !== -1 || this._predictionText.indexOf("伪人") !== -1) && this._state.step >= 2) {
+                if (!this._state.gameEnded) {
+                    this._state.unlockEnding(12);
+                    this.showEnding(12);
+                    return true;
+                }
+            }
+            return false;
+        },
+
+        checkCodeTruth: function() {
+            if (this._state.sanity === 100 && !this._state.gameEnded) {
+                this._state.unlockEnding(14);
+                this.showEnding(14);
+            }
+        },
+
+        startSanityDeathCheck: function() {
+            var self = this;
+            if (this._sanityDeathCheckInterval) clearInterval(this._sanityDeathCheckInterval);
+            this._sanityDeathCheckInterval = setInterval(function() {
+                if (!self._state.gameEnded && self._state.sanity <= 0) {
+                    if (self._searchCount >= 1) {
+                        self._state.unlockEnding(5);
+                        self.showEnding(5);
+                    } else {
+                        self._state.unlockEnding(1);
+                        self.showEnding(1);
+                    }
+                }
+            }, 400);
+        },
+
+        renderAchievements: function() {
+            var content = this._windowManager.getContent('achievements');
+            if (!content) return;
+
+            var html = '<div style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">' +
+                '<span style="color:#ffaa66;font-weight:bold;">已解锁：' + this._state.getUnlockedCount() + ' / 16 个结局</span>' +
+                '<span style="font-size:11px;color:#aaa;">点击卡片查看详情或解锁线索</span></div>' +
+                '<div class="achievement-grid">';
+
+            var endings = EndingsData.getAll();
+            for (var i = 1; i <= 16; i++) {
+                var ending = endings[i];
+                var unlocked = this._state.isEndingUnlocked(i);
+                html += '<div class="achievement-card ' + (unlocked ? 'unlocked' : 'locked') + '" data-end-id="' + i + '">' +
+                    '<div class="achievement-icon">' + (unlocked ? ending.name.split(' ')[0] : '❓') + '</div>' +
+                    '<div class="achievement-name">' + (unlocked ? ending.name : '结局 #' + i + ' (未解锁)') + '</div>' +
+                    '<div class="achievement-category">' + EndingsData.getCategoryName(ending.category) + '</div>' +
+                    '<div class="achievement-desc">' + (unlocked ? ending.condition : '💡 ' + ending.condition) + '</div>' +
+                    '</div>';
+            }
+            html += '</div><div id="endingDetailBox" style="margin-top:14px;"></div>';
+            content.innerHTML = html;
+
+            content.querySelectorAll('.achievement-card').forEach(function(card) {
+                card.onclick = function() {
+                    var id = parseInt(card.getAttribute('data-end-id'));
+                    var end = EndingsData.get(id);
+                    var isUnl = GameState.isEndingUnlocked(id);
+                    var box = document.getElementById('endingDetailBox');
+                    if (box && end) {
+                        box.innerHTML = '<div class="diary-entry" style="border-left-color:' + (isUnl ? '#88ffaa' : '#ffaa66') + ';">' +
+                            '<strong>' + (isUnl ? end.name : '🔒 未解锁结局 #' + id) + '</strong> (' + EndingsData.getCategoryName(end.category) + ')<br>' +
+                            '<span style="font-size:12px;color:#ffd4a8;">触发条件：' + end.condition + '</span>' +
+                            (isUnl ? '<p style="margin-top:6px;font-size:13px;color:#fff;">' + end.desc + '</p>' : '') +
+                            '</div>';
+                    }
+                };
+            });
+        },
+
+        applyForJob: function(job) {
+            if (this._state.gameEnded) {
+                Notifications.warning("本局已结束，请点击右上角或开始菜单的「重启本局」", 2500);
+                return;
+            }
+
+            if (job.id === 2 && job.fakeCamera) {
+                this.showCameraModalForJob(job);
+                return;
+            }
+
+            if (!this._state.jobApplied) {
+                this._state.jobApplied = true;
+                this._state.step = 1;
+                this._state.reduceSanity(15);
+                Settings.playSound('notification');
+                Quest.update("⚠️ 已投递简历！邮件箱收到了警告信，或继续深入查看...");
+                this._email.sendWarning();
+                this._notepad.render();
+                this._browser.showApplyResult(job);
+            } else {
+                this.escalateToInvasion();
+            }
+        },
+
+        escalateToInvasion: function() {
+            if (this._state.gameEnded) return;
+            this._state.step = 2;
+            this._state.reduceSanity(25);
+            this._email.render();
+            this._notepad.render();
+            this.shakeDesktop();
+            Settings.playSound('error');
+
+            // 1. 优先检查隐藏结局12：预知未来
+            if (this.checkPrediction()) return;
+
+            // 2. 检查普通结局3：断网避难
+            if (!this._state.isOnline) {
+                this._state.unlockEnding(3);
+                this.showEnding(3);
+                return;
+            }
+
+            // 3. 检查坏结局4：理智低于30%时被入侵（基因侵蚀）
+            if (this._state.sanity > 0 && this._state.sanity < 30) {
+                this._state.unlockEnding(4);
+                this.showEnding(4);
+                return;
+            }
+
+            // 4. 检查好结局6：全防护拦截入侵
+            var p = Settings.privacy;
+            if (p.firewallEnabled && p.antivirusEnabled && p.dnsEnabled) {
+                this._state.unlockEnding(6);
+                this.showEnding(6);
+                return;
+            }
+
+            // 5. 进入入侵对抗界面
+            Quest.update("🚨 伪人正在入侵系统！快断开网络、开启安全防护，或执行驱逐仪式！");
+            this.showInvasionInterface();
+        },
+
+        showInvasionInterface: function() {
+            var desktop = document.getElementById('desktopApp');
+            if (desktop) desktop.classList.add('desktop-glitch');
+
+            this._windowManager.open('browser', true);
+            var browserContent = this._windowManager.getContent('browser');
+            if (browserContent) {
+                browserContent.innerHTML = '<div style="text-align:center; padding: 30px 20px; border: 3px solid #ff3333; background: #2a1212; border-radius: 16px;">' +
+                    '<div style="font-size: 36px; margin-bottom:10px;">👁️‍🗨️ 系统已被伪人锁定 ⚠️</div>' +
+                    '<p id="glitchMsg" style="font-family: monospace; font-size: 16px; color: #ff9999; margin-bottom: 18px;">>> 正在读取你的生物识别特征 <<</p>' +
+                    '<p style="font-size:12px;color:#ccc;margin-bottom:20px;">提示：你仍有机会立刻【断开网络】或前往【安全中心/设置】开启全套防护，或者……</p>' +
+                    '<button id="desperateBtn" class="game-btn" style="background: #990000; padding: 12px 28px; font-weight:bold;">💀 强行终止未知进程（危险）</button>' +
+                    '</div>';
+
+                document.getElementById('desperateBtn').onclick = function() {
+                    if (window.Game) window.Game.triggerJumpscare();
+                };
+                this.startBrowserGlitch();
+            }
+        },
+
+        showCameraModalForJob: function(job) {
+            var modal = document.getElementById('cameraModal');
+            if (!modal) return;
+            modal.classList.remove('hidden');
+
+            var allowBtn = document.getElementById('cameraAllowBtn');
+            var denyBtn = document.getElementById('cameraDenyBtn');
+            var self = this;
+
+            allowBtn.onclick = function() {
+                modal.classList.add('hidden');
+                // 结局13：拒绝3次后第4次同意
+                if (self._cameraDenyCount >= 3 && !self._state.gameEnded) {
+                    self._state.unlockEnding(13);
+                    self.showEnding(13);
+                    return;
+                }
+                Settings.playSound('notification');
+                var browserContent = self._windowManager.getContent('browser');
+                if (browserContent) {
+                    browserContent.innerHTML = '<div style="text-align:center; padding:25px; border:2px solid #ff8888; background: #2a1a1a; border-radius:12px;">' +
+                        '<div style="font-size:28px; color: #ffaa66;">⚠️ 面容验证异常</div>' +
+                        '<p style="color: #eef4ff; margin:10px 0;">摄像头画面中出现了两个重叠的轮廓……匹配度 87%</p>' +
+                        '<button class="game-btn" id="backToJobsCam">返回职位列表</button></div>';
+                    document.getElementById('backToJobsCam').onclick = function() { self._browser.showJobListings(); };
+                }
+                self._state.reduceSanity(10);
+            };
+
+            denyBtn.onclick = function() {
+                modal.classList.add('hidden');
+                self._cameraDenyCount++;
+                Settings.playSound('click');
+
+                var browserContent = self._windowManager.getContent('browser');
+                if (browserContent) {
+                    var hintText = self._cameraDenyCount >= 3
+                        ? '👁️ 摄像头似乎自己亮起了红灯……下次若点击【允许访问】将会看到真相。'
+                        : '你拒绝了摄像头权限（已拒绝 ' + self._cameraDenyCount + ' / 3 次）。';
+                    browserContent.innerHTML = '<div style="color:#ffaa66; text-align:center; padding:30px;">' +
+                        '<div style="font-size:32px;margin-bottom:10px;">📷</div>' +
+                        '<p>' + hintText + '</p>' +
+                        '<button class="game-btn" id="backToJobsDeny" style="margin-top:15px;">返回职位列表</button></div>';
+                    document.getElementById('backToJobsDeny').onclick = function() { self._browser.showJobListings(); };
+                }
+            };
+        },
+
+        showEnding: function(endingId) {
+            if (this._state.gameEnded) return;
+            this._state.gameEnded = true;
+
+            var desktop = document.getElementById('desktopApp');
+            if (desktop) desktop.classList.remove('desktop-glitch');
+
+            var ending = EndingsData.get(endingId);
+            if (!ending) return;
+
+            this._state.unlockEnding(endingId);
+            this.renderAchievements();
+            this.updateEndingProgress();
+            this.renderStartMenuApps();
+
+            var modal = document.getElementById('endingModal');
+            document.getElementById('endingCategory').className = 'ending-category ' + ending.category;
+            document.getElementById('endingCategory').textContent = EndingsData.getCategoryName(ending.category);
+            document.getElementById('endingTitle').textContent = ending.name;
+            document.getElementById('endingText').innerHTML = ending.desc;
+            document.getElementById('endingHint').innerHTML = '🔍 解锁条件：' + ending.condition;
+            modal.classList.remove('hidden');
+
+            var self = this;
+            document.getElementById('restartGameBtn').onclick = function() { self.resetGame(); };
+            document.getElementById('continueBtn').onclick = function() {
+                modal.classList.add('hidden');
+                self._windowManager.open('achievements', true);
+            };
+        },
+
+        triggerJumpscare: function() {
+            if (this._state.jumpscareTriggered || this._state.gameEnded) return;
+            this._state.jumpscareTriggered = true;
+            this._windowManager.closeAll();
+
+            var overlay = document.createElement('div');
+            overlay.className = 'jumpscare-overlay';
+            overlay.innerHTML = '<div style="font-size: 90px; text-align: center;">👁️‍🗨️👤👁️‍🗨️</div>' +
+                '<div style="color: #ff4444; font-size: 38px; font-weight: bold; text-align: center; margin-top: 16px;">身 份 覆 写 完 成</div>' +
+                '<div style="color: #ffffff; margin-top: 18px; text-align: center; font-size: 16px;">现在，我是你了……</div>';
+            document.body.appendChild(overlay);
+
+            Settings.playSound('error');
+
+            var self = this;
+            setTimeout(function() {
+                overlay.remove();
+                self.showEnding(1);
+            }, 1800);
+        },
+
+        startBrowserGlitch: function() {
+            var self = this;
+            if (this._state.glitchInterval) clearInterval(this._state.glitchInterval);
+            this._state.glitchInterval = setInterval(function() {
+                var span = document.getElementById('glitchMsg');
+                if (span && self._state.step === 2 && !self._state.gameEnded) {
+                    var msgs = ['>> 我们已经找到你了 <<', '>> 不要回头看 <<', '>> 伪人正在接管你的身份 <<', '>> ( ՞ټ՞ ) 欢迎加入我们 <<'];
+                    span.innerText = msgs[Math.floor(Math.random() * msgs.length)];
+                }
+            }, 700);
+        },
+
+        shakeDesktop: function() {
+            var desk = document.querySelector('.desktop');
+            if (desk) {
+                desk.style.animation = 'shake 0.1s 4';
+                setTimeout(function() { desk.style.animation = ''; }, 420);
+            }
+        },
+
+        startSanityDrain: function() {
+            var self = this;
+            if (this._sanityDrainInterval) clearInterval(this._sanityDrainInterval);
+            this._sanityDrainInterval = setInterval(function() {
+                if (!self._state.gameEnded && self._state.step >= 2 && self._state.sanity > 0 && self._state.isOnline && !Settings.privacy.firewallEnabled) {
+                    self._state.reduceSanity(2);
+                }
+            }, 3000);
+        },
+
+        updateNetworkUI: function() {
+            var networkText = document.querySelector('.network-text');
+            var networkIcon = document.getElementById('networkIcon');
+            var networkContainer = document.getElementById('networkContainer');
+            var actionText = document.getElementById('networkActionText');
+
+            if (this._state.isOnline) {
+                if (networkText) networkText.textContent = '网络已连接';
+                if (networkIcon) networkIcon.textContent = '🌐';
+                if (actionText) actionText.textContent = '点击断开';
+                if (networkContainer) networkContainer.classList.remove('network-offline');
+            } else {
+                if (networkText) networkText.textContent = '网络已断开';
+                if (networkIcon) networkIcon.textContent = '🔌';
+                if (actionText) actionText.textContent = '点击重连';
+                if (networkContainer) networkContainer.classList.add('network-offline');
+            }
+        },
+
+        toggleNetwork: function() {
+            if (this._state.gameEnded) return;
+            this._state.isOnline = !this._state.isOnline;
+            this.updateNetworkUI();
+
+            if (!this._state.isOnline) {
+                Settings.playSound('notification');
+                Notifications.info("🔌 已断开网络连接！外部追踪信号已切断", 3000);
+                // 若已应聘或正在被入侵时断网 -> 触发结局3：断网避难
+                if (this._state.step >= 1 || this._state.jobApplied) {
+                    this._state.unlockEnding(3);
+                    this.showEnding(3);
+                }
+            } else {
+                Settings.playSound('click');
+                Notifications.info("🌐 网络已重新连接", 2500);
+                this._browser.renderGoogleHomepage();
+            }
+        },
+
+        updateEndingProgress: function() {
+            var count = this._state.getUnlockedCount();
+            var fill = document.getElementById('endingProgressFill');
+            var text = document.getElementById('endingProgressText');
+            if (fill) fill.style.width = ((count / 16) * 100) + '%';
+            if (text) text.innerText = count + ' / 16';
+        },
+
+        updateStartMenuUserInfo: function() {
+            var av = document.getElementById('startMenuAvatar');
+            var nm = document.getElementById('startMenuUserName');
+            var em = document.getElementById('startMenuUserEmail');
+            if (av) av.textContent = Settings.user.avatar;
+            if (nm) nm.textContent = Settings.user.name;
+            if (em) em.textContent = Settings.user.email;
+        },
+
+        renderStartMenuApps: function() {
+            var self = this;
+            var apps = [
+                { id: "browser", name: "浏览器", icon: "🌐", shortcut: "检索线索" },
+                { id: "email", name: "邮件箱", icon: "📧", shortcut: "查看警告" },
+                { id: "notepad", name: "记事本", icon: "📝", shortcut: "预言/咖啡" },
+                { id: "settings", name: "系统设置", icon: "⚙️", shortcut: "防护/时间" },
+                { id: "security", name: "安全中心", icon: "🛡️", shortcut: "病毒查杀" },
+                { id: "news", name: "紧急新闻", icon: "📰", shortcut: "时事快报" },
+                { id: "chat", name: "家人群聊", icon: "💬", shortcut: "联系家人" },
+                { id: "achievements", name: "结局图鉴", icon: "🏆", shortcut: this._state.getUnlockedCount() + "/16" }
+            ];
+
+            var pinned = document.getElementById('pinnedApps');
+            var allList = document.getElementById('allAppsList');
+            if (pinned) {
+                pinned.innerHTML = apps.map(function(a) {
+                    return '<div class="app-grid-item" data-win="' + a.id + '"><div class="app-grid-icon">' + a.icon + '</div><div class="app-grid-name">' + a.name + '</div></div>';
+                }).join('');
+            }
+            if (allList) {
+                allList.innerHTML = apps.map(function(a) {
+                    return '<div class="app-list-item" data-win="' + a.id + '"><span class="app-list-icon">' + a.icon + '</span><span class="app-list-name">' + a.name + '</span><span class="app-list-shortcut">' + a.shortcut + '</span></div>';
+                }).join('');
+            }
+
+            var rec = document.getElementById('recommendedItems');
+            if (rec) {
+                rec.innerHTML = '<div class="recommended-item" data-win="achievements"><span class="recommended-icon">🏆</span><div class="recommended-content"><div class="recommended-title">查看 16 个结局线索</div><div class="recommended-desc">当前已收集 ' + this._state.getUnlockedCount() + ' / 16 个结局</div></div><span class="recommended-action">打开 →</span></div>' +
+                    '<div class="recommended-item" data-win="settings"><span class="recommended-icon">🛡️</span><div class="recommended-content"><div class="recommended-title">配置安全防护与午夜时间</div><div class="recommended-desc">抵御伪人入侵或开启午夜仪式</div></div><span class="recommended-action">设置 →</span></div>';
+            }
+
+            document.querySelectorAll('#startMenu [data-win]').forEach(function(el) {
+                el.onclick = function() {
+                    var id = el.getAttribute('data-win');
+                    document.getElementById('startMenu').classList.add('hidden');
+                    self._windowManager.open(id, true);
+                    Settings.playSound('click');
+                };
+            });
+        },
+
+        bindUIEvents: function() {
+            var self = this;
+
+            // 桌面图标：单击即可直接打开（兼容桌面与手机触屏，体验更流畅）
+            document.querySelectorAll('.desktop-icon').forEach(function(icon) {
+                icon.onclick = function(e) {
+                    e.stopPropagation();
+                    document.querySelectorAll('.desktop-icon').forEach(function(ic) { ic.classList.remove('selected'); });
+                    icon.classList.add('selected');
+                    var winId = icon.getAttribute('data-win');
+                    if (winId) {
+                        self._windowManager.open(winId, true);
+                        Settings.playSound('click');
+                    }
+                };
+            });
+
+            // 任务栏应用图标
+            document.querySelectorAll('.task-icon').forEach(function(el) {
+                el.onclick = function(e) {
+                    e.stopPropagation();
+                    var winId = el.getAttribute('data-win');
+                    if (winId) {
+                        self._windowManager.open(winId);
+                        Settings.playSound('click');
+                    }
+                };
+            });
+
+            // 右侧面板网络卡片 & 进度卡片点击
+            var netCard = document.getElementById('networkContainer');
+            if (netCard) netCard.onclick = function() { self.toggleNetwork(); };
+            var netBtn = document.getElementById('networkToggleBtn');
+            if (netBtn) netBtn.onclick = function() { self.toggleNetwork(); };
+
+            var progCard = document.getElementById('endingProgressCard');
+            if (progCard) progCard.onclick = function() { self._windowManager.open('achievements', true); };
+
+            // 开始菜单控制
+            var startBtn = document.getElementById('startBtn');
+            var startMenu = document.getElementById('startMenu');
+            if (startBtn && startMenu) {
+                startBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    startMenu.classList.toggle('hidden');
+                    Settings.playSound('click');
+                };
+            }
+
+            var searchInput = document.getElementById('startMenuSearch');
+            if (searchInput) {
+                searchInput.oninput = function() {
+                    var q = searchInput.value.toLowerCase();
+                    document.querySelectorAll('#allAppsList .app-list-item').forEach(function(item) {
+                        item.style.display = item.textContent.toLowerCase().indexOf(q) !== -1 ? 'flex' : 'none';
+                    });
+                };
+            }
+
+            var taskbarSearch = document.getElementById('taskbarSearch');
+            if (taskbarSearch && startMenu) {
+                taskbarSearch.onfocus = function() { startMenu.classList.remove('hidden'); };
+                taskbarSearch.oninput = function() {
+                    if (searchInput) {
+                        searchInput.value = taskbarSearch.value;
+                        searchInput.oninput();
+                    }
+                };
+            }
+
+            document.getElementById('shutdownBtn').onclick = function() {
+                startMenu.classList.add('hidden');
+                self._state.unlockEnding(2);
+                self.showEnding(2);
+            };
+
+            document.getElementById('restartBtn').onclick = function() {
+                startMenu.classList.add('hidden');
+                self.resetGame();
+            };
+
+            document.getElementById('achievementsBtn').onclick = function() {
+                startMenu.classList.add('hidden');
+                self._windowManager.open('achievements', true);
+            };
+
+            document.getElementById('settingsQuickBtn').onclick = function() {
+                startMenu.classList.add('hidden');
+                self._windowManager.open('settings', true);
+            };
+
+            document.getElementById('userSettingsBtn').onclick = function() {
+                startMenu.classList.add('hidden');
+                Settings.currentPage = 'account';
+                Settings.render();
+                self._windowManager.open('settings', true);
+            };
+
+            document.getElementById('volumeBtn').onclick = function() {
+                Settings.system.sound = !Settings.system.sound;
+                Settings.save();
+                document.getElementById('volumeBtn').textContent = Settings.system.sound ? '🔊' : '🔇';
+                Notifications.info(Settings.system.sound ? "🔊 音效已开启" : "🔇 音效已静音", 1800);
+            };
+
+            document.getElementById('showDesktopBtn').onclick = function() {
+                self._windowManager.closeAll();
+            };
+
+            document.addEventListener('click', function(e) {
+                if (startMenu && !startMenu.contains(e.target) && !startBtn.contains(e.target) && e.target !== taskbarSearch) {
+                    startMenu.classList.add('hidden');
+                }
+            });
+        },
+
+        startClock: function() {
+            Helpers.updateClock();
+            if (this._clockInterval) clearInterval(this._clockInterval);
+            this._clockInterval = setInterval(function() { Helpers.updateClock(); }, 1000);
+        },
+
+        checkMobile: function() {
+            if (window.innerWidth <= 768) {
+                var tip = document.getElementById('mobileTip');
+                if (tip) tip.classList.remove('hidden');
+                var closeBtn = document.getElementById('closeMobileTip');
+                if (closeBtn) closeBtn.onclick = function() { tip.classList.add('hidden'); };
+            }
+        },
+
+        resetGame: function() {
+            this._cameraDenyCount = 0;
+            this._searchCount = 0;
+            this._toggleCount = 0;
+            this._ancientBooksFound = [];
+            this._predictionText = '';
+            this._emailsRead = false;
+
+            var desktop = document.getElementById('desktopApp');
+            if (desktop) desktop.classList.remove('desktop-glitch');
+
+            document.getElementById('endingModal').classList.add('hidden');
+            document.getElementById('cameraModal').classList.add('hidden');
+            this._windowManager.closeAll();
+
+            // 重置每局安全开关（保留已解锁的 16 结局图鉴进度）
+            Settings.privacy.firewallEnabled = false;
+            Settings.privacy.privacyEnabled = false;
+            Settings.privacy.antivirusEnabled = false;
+            Settings.privacy.dnsEnabled = false;
+            Settings.render();
+
+            this._state.reset();
+            this._globalDoom.cleanup();
+            this._globalDoom.init(
+                this._state,
+                this._windowManager.getWindow('news'),
+                this._windowManager.getWindow('chat'),
+                this._windowManager.getContent('news'),
+                this._windowManager.getContent('chat'),
+                this
+            );
+            this._email.init(this._windowManager.getContent('email'), this._state, this);
+            this._notepad.init(this._windowManager.getContent('notepad'), this._state, this);
+            this._security.init(this._windowManager.getContent('security'), this._state, this._settings, this);
+            this._browser.renderGoogleHomepage();
+
+            this.updateNetworkUI();
+            this.renderAchievements();
+            this.updateEndingProgress();
+            Quest.update("🔍 新的一局开始了！打开「浏览器」寻找工作或探索秘密...");
+            Notifications.success("🔄 已开启新一局（历史解锁的结局已保留）", 2500);
+        }
+    };
+
+    window.addEventListener('DOMContentLoaded', function() {
+        Game.init();
+    });
+    </script>
+</body>
+</html>

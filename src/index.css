@@ -1,0 +1,110 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --accent-color: #f59e0b;
+  --horror-intensity: 0;
+  --font-sans: 'Plus Jakarta Sans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+.font-mono-tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Horror vignette & CRT scanlines */
+.horror-vignette {
+  background: radial-gradient(
+    circle at center,
+    transparent 52%,
+    rgba(95, 8, 8, calc(var(--horror-intensity) * 0.72)) 100%
+  );
+  transition: background 0.45s ease;
+}
+
+.crt-scanlines {
+  background:
+    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.2) 50%),
+    linear-gradient(90deg, rgba(255, 0, 0, 0.025), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.025));
+  background-size: 100% 3px, 6px 100%;
+  opacity: calc(0.18 + var(--horror-intensity) * 0.58);
+}
+
+@keyframes screenGlitch {
+  0% { transform: translate(0, 0); filter: hue-rotate(0deg); }
+  25% { transform: translate(-2px, 1px); filter: hue-rotate(12deg) contrast(1.08); }
+  50% { transform: translate(2px, -1px); filter: hue-rotate(-12deg); }
+  75% { transform: translate(-1px, -2px); filter: contrast(1.15); }
+  100% { transform: translate(0, 0); filter: hue-rotate(0deg); }
+}
+
+@keyframes desktopShake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-6px, 3px); }
+  40% { transform: translate(6px, -3px); }
+  60% { transform: translate(-4px, -3px); }
+  80% { transform: translate(4px, 3px); }
+}
+
+@keyframes jumpscareFlash {
+  0%, 100% { opacity: 1; filter: contrast(1.2); }
+  50% { opacity: 0.75; filter: invert(0.08) contrast(1.6); }
+}
+
+@keyframes scanBeam {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(200%); }
+}
+
+.animate-glitch {
+  animation: screenGlitch 0.24s infinite;
+}
+
+.animate-shake {
+  animation: desktopShake 0.38s ease-in-out;
+}
+
+.animate-jumpscare {
+  animation: jumpscareFlash 0.14s 8;
+}
+
+.animate-scan-beam {
+  animation: scanBeam 2.2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-glitch,
+  .animate-shake,
+  .animate-jumpscare,
+  .animate-scan-beam {
+    animation: none !important;
+  }
+}
+
+/* Custom subtle scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.28);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.45);
+}

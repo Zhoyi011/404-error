@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="45%" r="60%">
+      <stop offset="0%" stop-color="#0f243f" />
+      <stop offset="65%" stop-color="#070b14" />
+      <stop offset="100%" stop-color="#04060b" />
+    </radialGradient>
+    <linearGradient id="screenStroke" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="55%" stop-color="#0ea5e9" />
+      <stop offset="100%" stop-color="#f43f5e" />
+    </linearGradient>
+    <radialGradient id="eyeIris" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fb7185" />
+      <stop offset="60%" stop-color="#e11d48" />
+      <stop offset="100%" stop-color="#881337" />
+    </radialGradient>
+  </defs>
+
+  <!-- Base Rounded Tile -->
+  <rect width="512" height="512" rx="108" fill="url(#bgGlow)" />
+  <rect x="16" y="16" width="480" height="480" rx="96" stroke="#1e293b" stroke-width="4" />
+
+  <!-- Subtle Scanline Grid -->
+  <path d="M40 160H472M40 256H472M40 352H472" stroke="#38bdf8" stroke-opacity="0.08" stroke-width="2" />
+
+  <!-- CRT / Virtual Desktop Window Frame (within 80% safe zone) -->
+  <rect x="88" y="108" width="336" height="248" rx="28" fill="#0b1322" stroke="url(#screenStroke)" stroke-width="10" />
+  <line x1="94" y1="154" x2="418" y2="154" stroke="#1e293b" stroke-width="6" />
+
+  <!-- Window Traffic Lights -->
+  <circle cx="128" cy="131" r="8" fill="#f43f5e" />
+  <circle cx="154" cy="131" r="8" fill="#fbbf24" />
+  <circle cx="180" cy="131" r="8" fill="#38bdf8" />
+
+  <!-- Watching Eye Motif -->
+  <path
+    d="M142 248C172 198 214 178 256 178C298 178 340 198 370 248C340 298 298 318 256 318C214 318 172 298 142 248Z"
+    fill="#05070d"
+    stroke="#38bdf8"
+    stroke-width="8"
+  />
+  <circle cx="256" cy="248" r="42" fill="url(#eyeIris)" />
+  <circle cx="256" cy="248" r="16" fill="#05070d" />
+  <circle cx="272" cy="233" r="8" fill="#ffffff" fill-opacity="0.9" />
+
+  <!-- 404 Stand & Status Bar -->
+  <rect x="228" y="356" width="56" height="32" rx="4" fill="#1e293b" />
+  <rect x="168" y="388" width="176" height="20" rx="10" fill="#38bdf8" fill-opacity="0.9" />
+  <rect x="192" y="394" width="44" height="8" rx="4" fill="#f43f5e" />
+</svg>
