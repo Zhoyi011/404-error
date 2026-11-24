@@ -16,7 +16,7 @@ import {
 import { useGame } from '../context/GameContext';
 import { ThemeMode } from '../types/game';
 import { soundEngine } from '../utils/audio';
-import { PWACachePanel, PWAInstallButton } from './PWAComponents';
+import { ClientDownloadButton, PWACachePanel, PWAInstallButton } from './PWAComponents';
 import { AchievementsApp } from './apps/AchievementsApp';
 
 const SPLASH_QUOTES = [
@@ -294,7 +294,8 @@ export const PreGameFlow: React.FC = () => {
               <span>玩法与操作说明</span>
             </button>
 
-            <div className="pt-1 flex justify-center">
+            <div className="pt-1 flex flex-col gap-2">
+              <ClientDownloadButton className="w-full" />
               <PWAInstallButton className="w-full" />
             </div>
           </div>

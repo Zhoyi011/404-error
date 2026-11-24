@@ -1,0 +1,242 @@
+name: Build and Publish GitHub Release
+
+on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  resolve-version:
+    name: Resolve Release Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      tag: ${{ steps.ver.outputs.tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Compute release version and changelog notes
+        id: ver
+        run: |
+          BASE_VERSION="$(node -e 'console.log(require("./package.json").version || "1.0.0")')"
+          MAJOR_MINOR="$(echo "${BASE_VERSION}" | awk -F. '{print $1"."$2}')"
+          RELEASE_VERSION="${BASE_VERSION}"
+
+          if git rev-parse "v${RELEASE_VERSION}" >/dev/null 2>&1; then
+            LAST_TAG="$(git tag -l "v${MAJOR_MINOR}.*" --sort=-v:refname | head -n 1 || true)"
+            if [ -n "${LAST_TAG}" ]; then
+              LAST_PATCH="$(echo "${LAST_TAG#v}" | awk -F. '{print $3}' | sed 's/[^0-9].*//')"
+              NEXT_PATCH=$(( ${LAST_PATCH:-0} + 1 ))
+              RELEASE_VERSION="${MAJOR_MINOR}.${NEXT_PATCH}"
+            else
+              RELEASE_VERSION="${MAJOR_MINOR}.${{ github.run_number }}"
+            fi
+          fi
+
+          PREV_TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+          if [ -n "${PREV_TAG}" ]; then
+            COMMIT_NOTES="$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s" -n 10 || true)"
+          else
+            COMMIT_NOTES="$(git log -n 5 --pretty=format:"- %s" || true)"
+          fi
+          if [ -z "${COMMIT_NOTES}" ]; then
+            COMMIT_NOTES="- 发布 v${RELEASE_VERSION} 客户端构建"
+          fi
+
+          echo "${COMMIT_NOTES}" > /tmp/release-notes.txt
+          echo "version=${RELEASE_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "tag=v${RELEASE_VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload release notes artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: /tmp/release-notes.txt
+
+  build-windows-exe:
+    name: Build Windows EXE (Tauri)
+    needs: resolve-version
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install npm dependencies
+        run: npm install
+
+      - name: Sync version (${{ needs.resolve-version.outputs.version }})
+        run: node scripts/sync-version.mjs "${{ needs.resolve-version.outputs.version }}"
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Generate app icons
+        run: node scripts/generate-icons.mjs
+
+      - name: Build Tauri Windows EXE
+        shell: bash
+        run: npx --yes @tauri-apps/cli@2 build --bundles nsis
+
+      - name: Collect Windows EXE artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          NSIS_EXE="$(find src-tauri/target/release/bundle/nsis -maxdepth 1 -name '*-setup.exe' | head -n 1)"
+          if [ -z "${NSIS_EXE}" ]; then
+            echo "NSIS setup exe not found!"
+            exit 1
+          fi
+          cp "${NSIS_EXE}" "artifacts/404-error-windows.exe"
+          if [ -f "src-tauri/target/release/horror-404.exe" ]; then
+            cp "src-tauri/target/release/horror-404.exe" "artifacts/404-error-windows-portable.exe"
+          fi
+          ls -lh artifacts/
+
+      - name: Upload Windows EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: artifacts/*.exe
+
+  build-android-apk:
+    name: Build Android APK (Capacitor)
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android 34 SDK components
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Install root npm dependencies
+        run: npm install
+
+      - name: Sync version (${{ needs.resolve-version.outputs.version }})
+        run: node scripts/sync-version.mjs "${{ needs.resolve-version.outputs.version }}"
+
+      - name: Build Android APK (Release signed if Secrets configured, else Debug fallback)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          chmod +x packaging/build-apk.sh
+          if [ -n "${KEYSTORE_BASE64}" ]; then
+            echo "${KEYSTORE_BASE64}" | tr -d '[:space:]' | base64 -d > /tmp/release.keystore
+            export ANDROID_KEYSTORE_PATH="/tmp/release.keystore"
+            export ANDROID_KEYSTORE_PASSWORD="${KEYSTORE_PASSWORD}"
+            export ANDROID_KEY_ALIAS="${KEY_ALIAS}"
+            export ANDROID_KEY_PASSWORD="${KEY_PASSWORD}"
+            bash packaging/build-apk.sh release
+          else
+            echo "::notice::KEYSTORE_BASE64 secret is not configured yet; building debug-signed APK fallback."
+            bash packaging/build-apk.sh debug
+          fi
+
+      - name: Upload Android APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: packaging/android-capacitor/404-error-android.apk
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [resolve-version, build-windows-exe, build-android-apk]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate version.json
+        env:
+          RELEASE_VERSION: ${{ needs.resolve-version.outputs.version }}
+        run: |
+          export RELEASE_NOTES="$(cat release-assets/release-notes.txt 2>/dev/null || echo "- 发布新版本")"
+          node scripts/generate-version-json.mjs release-assets/version.json
+          cat release-assets/version.json
+          ls -lh release-assets/
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        env:
+          RELEASE_TAG: ${{ needs.resolve-version.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.resolve-version.outputs.version }}
+        run: |
+          NOTES_CONTENT="$(cat release-assets/release-notes.txt 2>/dev/null || echo "- 发布新版本")"
+          cat <<EOF > /tmp/release-body.md
+          ## 伪人入侵 ${RELEASE_TAG}
+
+          ${NOTES_CONTENT}
+
+          ### 安装包说明
+          - **Windows (.exe)**：\`404-error-windows.exe\`（安装版） / \`404-error-windows-portable.exe\`（单文件绿色版）
+          - **Android (.apk)**：\`404-error-android.apk\`
+          EOF
+        with:
+          tag_name: ${{ needs.resolve-version.outputs.tag }}
+          name: "伪人入侵 ${{ needs.resolve-version.outputs.tag }}"
+          body_path: /tmp/release-body.md
+          draft: false
+          prerelease: false
+          make_latest: true
+          files: |
+            release-assets/404-error-windows.exe
+            release-assets/404-error-windows-portable.exe
+            release-assets/404-error-android.apk
+            release-assets/version.json

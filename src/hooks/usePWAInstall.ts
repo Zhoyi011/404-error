@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
 import { registerSW } from 'virtual:pwa-register';
-
-export const REMOTE_UPDATE_ORIGIN = 'https://404-horror.ai.studio';
+import { detectClientPlatform } from '../services/clientUpdater';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+}
+
+export function detectNativeClientShell(): boolean {
+  return detectClientPlatform() !== 'web';
+}
+
+function detectStandaloneMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (window.navigator as unknown as { standalone?: boolean }).standalone === true
+  );
 }
 
 type SyncListener = () => void;
@@ -61,7 +72,7 @@ function initServiceWorkerOnce() {
       immediate: true,
       onNeedRefresh() {
         syncState.needRefresh = true;
-        syncState.statusText = '检测到远程新版本，已缓存到本地等待应用';
+        syncState.statusText = '检测到新版本网页资源，已缓存到本地等待应用';
         emitSync();
       },
       onOfflineReady() {
@@ -73,7 +84,6 @@ function initServiceWorkerOnce() {
       onRegisteredSW(_swUrl, registration) {
         if (registration) {
           syncState.registration = registration;
-          // Periodic background update check every 30 minutes
           window.setInterval(() => {
             if (navigator.onLine) {
               void registration.update();
@@ -93,23 +103,23 @@ function initServiceWorkerOnce() {
 
 export function usePWAInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isInstalled, setIsInstalled] = useState(false);
-  const [isIOS, setIsIOS] = useState(false);
-  const [isNativeShell, setIsNativeShell] = useState(false);
+  const [isNativeShell, setIsNativeShell] = useState(() => detectNativeClientShell());
+  const [isInstalled, setIsInstalled] = useState(
+    () => detectStandaloneMode() || detectNativeClientShell()
+  );
+  const [isIOS, setIsIOS] = useState(() =>
+    typeof window !== 'undefined'
+      ? /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase())
+      : false
+  );
 
   useEffect(() => {
     const ua = window.navigator.userAgent.toLowerCase();
-    const isStandalone =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as unknown as { standalone?: boolean }).standalone === true;
-    const isElectronOrCap =
-      ua.includes('electron') ||
-      ua.includes('404horror-desktop') ||
-      ua.includes('404horror-android') ||
-      Boolean((window as unknown as { Capacitor?: unknown }).Capacitor);
+    const native = detectNativeClientShell();
+    const standalone = detectStandaloneMode();
 
-    setIsInstalled(isStandalone || isElectronOrCap);
-    setIsNativeShell(isElectronOrCap);
+    setIsNativeShell(native);
+    setIsInstalled(standalone || native);
     setIsIOS(/iphone|ipad|ipod/.test(ua));
 
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -189,7 +199,7 @@ export function usePWASync() {
   const checkForUpdates = useCallback(async () => {
     if (syncState.checkingUpdate) return false;
     syncState.checkingUpdate = true;
-    syncState.statusText = `正在向 ${REMOTE_UPDATE_ORIGIN} 检查更新...`;
+    syncState.statusText = '正在检查本地离线资源更新...';
     emitSync();
 
     try {
@@ -202,11 +212,10 @@ export function usePWASync() {
           await reg.update();
         }
       }
-      // Also probe manifest to verify connectivity & warm cache
       await fetch('/manifest.webmanifest', { cache: 'no-store' }).catch(() => null);
       syncState.lastChecked = new Date().toLocaleTimeString('zh-CN', { hour12: false });
       if (!syncState.needRefresh) {
-        syncState.statusText = '当前已是最新本地缓存版本';
+        syncState.statusText = '本地离线缓存已处于最新状态';
       }
       await inspectLocalCache();
       return true;

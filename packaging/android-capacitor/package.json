@@ -1,18 +1,20 @@
 {
   "name": "404-horror-android",
   "version": "1.0.0",
-  "description": "伪人入侵 Android 混合壳 (支持 https://404-horror.ai.studio 热更新与离线内置兜底)",
+  "description": "伪人入侵 Capacitor Android 客户端（内置离线资源包 + GitHub Releases 自动检测更新）",
   "private": true,
   "scripts": {
+    "cap:add": "npx cap add android",
     "cap:sync": "npx cap sync android",
     "cap:build-debug": "cd android && ./gradlew assembleDebug",
-    "cap:build-release": "cd android && ./gradlew assembleRelease"
+    "cap:build-release": "cd android && ./gradlew assembleRelease",
+    "build:apk": "bash ../build-apk.sh capacitor"
   },
   "dependencies": {
-    "@capacitor/android": "^7.0.0",
-    "@capacitor/core": "^7.0.0"
+    "@capacitor/android": "^6.2.3",
+    "@capacitor/core": "^6.2.3"
   },
   "devDependencies": {
-    "@capacitor/cli": "^7.0.0"
+    "@capacitor/cli": "^6.2.3"
   }
 }

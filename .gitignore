@@ -6,3 +6,12 @@ coverage/
 *.log
 .env*
 !.env.example
+packaging/*/node_modules/
+packaging/desktop/app-dist/
+packaging/desktop/release/
+packaging/android-capacitor/android/
+packaging/android-capacitor/www/
+packaging/android-capacitor/*.apk
+src-tauri/target/
+src-tauri/gen/
+version.json

@@ -32,6 +32,7 @@ import { DesktopHUD } from './components/DesktopHUD';
 import { DesktopWindow } from './components/DesktopWindow';
 import { MobilePhoneShell } from './components/MobilePhoneShell';
 import { Overlays } from './components/Overlays';
+import { ClientUpdateModal } from './components/ClientUpdateModal';
 import { PreGameFlow } from './components/PreGameFlow';
 import { OfflineIndicator, PWAUpdateBanner } from './components/PWAComponents';
 import { StartMenu } from './components/StartMenu';
@@ -562,6 +563,7 @@ export default function App() {
       <VirtualDesktop />
       <OfflineIndicator />
       <PWAUpdateBanner />
+      <ClientUpdateModal />
     </GameProvider>
   );
 }

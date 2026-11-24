@@ -249,8 +249,8 @@ function renderBrandIcon(size, { maskable = false } = {}) {
 
 const root = process.cwd();
 const publicDir = path.join(root, 'public');
-const desktopBuildDir = path.join(root, 'packaging', 'desktop', 'build');
-fs.mkdirSync(desktopBuildDir, { recursive: true });
+const tauriIconsDir = path.join(root, 'src-tauri', 'icons');
+fs.mkdirSync(tauriIconsDir, { recursive: true });
 
 const icons = [
   { file: path.join(publicDir, 'pwa-192x192.png'), size: 192, maskable: false },
@@ -265,11 +265,20 @@ for (const item of icons) {
   console.log(`Generated ${path.relative(root, item.file)} (${png.length} bytes)`);
 }
 
-// Desktop Electron icon.png (512x512) & icon.ico (256x256 PNG-in-ICO)
-const desktopPng512 = fs.readFileSync(path.join(publicDir, 'pwa-512x512.png'));
-fs.writeFileSync(path.join(desktopBuildDir, 'icon.png'), desktopPng512);
+// Tauri v2 required desktop icons (32x32, 128x128, 256x256 @2x, 512x512 icon.png, 256x256 icon.ico)
+const tauriPngSizes = [
+  { name: '32x32.png', size: 32 },
+  { name: '128x128.png', size: 128 },
+  { name: '128x128@2x.png', size: 256 },
+  { name: 'icon.png', size: 512 },
+];
+
+for (const item of tauriPngSizes) {
+  const png = renderBrandIcon(item.size, { maskable: false });
+  fs.writeFileSync(path.join(tauriIconsDir, item.name), png);
+}
 
 const icoPng256 = renderBrandIcon(256, { maskable: false });
 const icoBuf = encodeIcoFromPng(icoPng256, 256, 256);
-fs.writeFileSync(path.join(desktopBuildDir, 'icon.ico'), icoBuf);
-console.log(`Generated packaging/desktop/build/icon.png & icon.ico (${icoBuf.length} bytes)`);
+fs.writeFileSync(path.join(tauriIconsDir, 'icon.ico'), icoBuf);
+console.log(`Generated src-tauri/icons/* and icon.ico (${icoBuf.length} bytes)`);
