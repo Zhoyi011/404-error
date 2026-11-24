@@ -9,7 +9,7 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const version = (process.env.RELEASE_VERSION || pkg.version || '1.0.0').replace(/^v/, '').trim();
 const notes =
   (process.env.RELEASE_NOTES || '').trim() ||
-  `发布 v${version}：包含桌面端 (.exe) 与移动端 (.apk) 客户端更新及离线资源同步。`;
+  `发布 v${version}：包含 Windows (.exe)、Linux (AppImage / .deb) 与 Android (.apk) 客户端更新及离线资源同步。`;
 const outPath = path.resolve(root, process.argv[2] || 'version.json');
 
 const manifest = {
@@ -21,6 +21,8 @@ const manifest = {
   downloads: {
     windows: `${RELEASE_BASE}/404-error-windows.exe`,
     windowsPortable: `${RELEASE_BASE}/404-error-windows-portable.exe`,
+    linuxAppImage: `${RELEASE_BASE}/404-error-linux.AppImage`,
+    linuxDeb: `${RELEASE_BASE}/404-error-linux.deb`,
     android: `${RELEASE_BASE}/404-error-android.apk`,
   },
   platforms: {
@@ -28,6 +30,12 @@ const manifest = {
       url: `${RELEASE_BASE}/404-error-windows.exe`,
       portableUrl: `${RELEASE_BASE}/404-error-windows-portable.exe`,
       fileName: '404-error-windows.exe',
+    },
+    linux: {
+      appImageUrl: `${RELEASE_BASE}/404-error-linux.AppImage`,
+      debUrl: `${RELEASE_BASE}/404-error-linux.deb`,
+      appImageFileName: '404-error-linux.AppImage',
+      debFileName: '404-error-linux.deb',
     },
     android: {
       url: `${RELEASE_BASE}/404-error-android.apk`,

@@ -1,0 +1,12 @@
+{
+  "productName": "horror-404",
+  "mainBinaryName": "horror-404",
+  "bundle": {
+    "targets": ["appimage", "deb"],
+    "linux": {
+      "deb": {
+        "section": "games"
+      }
+    }
+  }
+}

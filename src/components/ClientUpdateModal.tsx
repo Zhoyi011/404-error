@@ -1,6 +1,55 @@
 import React, { useState } from 'react';
-import { ArrowDownToLine, CheckCircle2, Monitor, Smartphone, Sparkles, X } from 'lucide-react';
+import {
+  ArrowDownToLine,
+  CheckCircle2,
+  ExternalLink,
+  Monitor,
+  Smartphone,
+  Sparkles,
+  Terminal,
+  X,
+} from 'lucide-react';
 import { useClientUpdater } from '../hooks/useClientUpdater';
+import { ClientRuntimePlatform } from '../services/clientUpdater';
+
+function getPlatformMeta(platform: ClientRuntimePlatform): {
+  label: string;
+  actionText: string;
+  fileName: string;
+  kind: 'windows' | 'linux' | 'android';
+} {
+  switch (platform) {
+    case 'linux-appimage':
+      return {
+        label: 'Linux 桌面客户端 (AppImage)',
+        actionText: '立即更新 (.AppImage)',
+        fileName: '404-error-linux.AppImage',
+        kind: 'linux',
+      };
+    case 'linux-deb':
+      return {
+        label: 'Linux 桌面客户端 (.deb)',
+        actionText: '立即更新 (.deb)',
+        fileName: '404-error-linux.deb',
+        kind: 'linux',
+      };
+    case 'android-apk':
+      return {
+        label: 'Android 移动客户端 (.apk)',
+        actionText: '立即更新 (.apk)',
+        fileName: '404-error-android.apk',
+        kind: 'android',
+      };
+    case 'windows-exe':
+    default:
+      return {
+        label: 'Windows 桌面客户端 (.exe)',
+        actionText: '立即更新 (.exe)',
+        fileName: '404-error-windows.exe',
+        kind: 'windows',
+      };
+  }
+}
 
 export const ClientUpdateModal: React.FC = () => {
   const {
@@ -10,19 +59,20 @@ export const ClientUpdateModal: React.FC = () => {
     latestRelease,
     hasUpdate,
     modalOpen,
+    downloadUrl,
     dismissModal,
     startDownload,
   } = useClientUpdater();
 
   const [downloading, setDownloading] = useState(false);
+  const [downloadStarted, setDownloadStarted] = useState(false);
 
-  // Strictly only render inside Windows EXE or Android APK
+  // Strictly only render inside Windows EXE, Linux AppImage/DEB, or Android APK
   if (!isNativeClient || !modalOpen || !hasUpdate || !latestRelease) {
     return null;
   }
 
-  const isWindows = platform === 'windows-exe';
-  const platformLabel = isWindows ? 'Windows 桌面客户端 (.exe)' : 'Android 移动客户端 (.apk)';
+  const meta = getPlatformMeta(platform);
   const formattedDate = latestRelease.releaseDate
     ? new Date(latestRelease.releaseDate).toLocaleDateString('zh-CN')
     : null;
@@ -31,28 +81,31 @@ export const ClientUpdateModal: React.FC = () => {
     setDownloading(true);
     try {
       await startDownload();
+      setDownloadStarted(true);
     } finally {
       window.setTimeout(() => setDownloading(false), 1200);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 select-none">
-      <div className="w-full max-w-md rounded-2xl border border-sky-500/40 bg-slate-900 text-slate-100 shadow-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-sky-400">
+    <div className="fixed inset-0 z-[9998] flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm p-2 sm:p-4 select-none">
+      <div className="w-full max-w-md max-h-[90dvh] flex flex-col rounded-2xl border border-sky-500/40 bg-slate-900 text-slate-100 shadow-2xl overflow-hidden">
+        <div className="shrink-0 px-4 py-3 sm:px-5 sm:py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-sky-400 shrink-0">
               <Sparkles className="w-4 h-4" />
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-100">发现客户端新版本</h3>
-              <p className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
-                {isWindows ? (
-                  <Monitor className="w-3 h-3 text-sky-400" />
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-slate-100 truncate">发现客户端新版本</h3>
+              <p className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5 truncate">
+                {meta.kind === 'windows' ? (
+                  <Monitor className="w-3 h-3 text-sky-400 shrink-0" />
+                ) : meta.kind === 'linux' ? (
+                  <Terminal className="w-3 h-3 text-amber-400 shrink-0" />
                 ) : (
-                  <Smartphone className="w-3 h-3 text-emerald-400" />
+                  <Smartphone className="w-3 h-3 text-emerald-400 shrink-0" />
                 )}
-                <span>{platformLabel}</span>
+                <span className="truncate">{meta.label}</span>
               </p>
             </div>
           </div>
@@ -60,14 +113,14 @@ export const ClientUpdateModal: React.FC = () => {
             type="button"
             onClick={dismissModal}
             aria-label="关闭更新提示"
-            className="w-8 h-8 rounded-lg hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white cursor-pointer"
+            className="w-8 h-8 rounded-lg hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="p-5 space-y-4 text-xs">
-          <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-3.5 text-xs">
+          <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 px-3.5 py-2.5 sm:px-4 sm:py-3">
             <div>
               <div className="text-slate-400">当前本地版本</div>
               <div className="font-mono-tabular text-sm font-semibold text-slate-200 mt-0.5">
@@ -83,42 +136,62 @@ export const ClientUpdateModal: React.FC = () => {
             </div>
           </div>
 
+          <div className="rounded-xl border border-sky-500/20 bg-sky-950/25 px-3 py-2 text-[11px] text-sky-200 flex items-center justify-between gap-2">
+            <span className="text-slate-300 shrink-0">自动匹配安装包</span>
+            <span className="font-mono text-sky-300 truncate">{meta.fileName}</span>
+          </div>
+
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-slate-400">
               <span className="font-semibold text-slate-300">更新说明</span>
               {formattedDate && <span className="font-mono-tabular">{formattedDate}</span>}
             </div>
-            <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/70 p-3 text-slate-300 leading-relaxed whitespace-pre-wrap">
+            <div className="max-h-36 sm:max-h-44 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/70 p-3 text-slate-300 leading-relaxed whitespace-pre-wrap">
               {latestRelease.notes || '优化客户端性能与本地离线体验，建议立即升级。'}
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 pt-1">
-            <button
-              type="button"
-              onClick={dismissModal}
-              className="flex-1 py-2.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-800 text-slate-300 font-medium cursor-pointer"
-            >
-              稍后提醒
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleUpdateClick()}
-              className="flex-[1.5] py-2.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold flex items-center justify-center gap-2 shadow-lg cursor-pointer"
-            >
-              {downloading ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>正在拉起下载...</span>
-                </>
-              ) : (
-                <>
-                  <ArrowDownToLine className="w-4 h-4" />
-                  <span>{isWindows ? '立即更新 (.exe)' : '立即更新 (.apk)'}</span>
-                </>
-              )}
-            </button>
-          </div>
+          {downloadStarted && downloadUrl && (
+            <div className="rounded-xl border border-emerald-500/35 bg-emerald-950/35 px-3 py-2 text-[11px] text-emerald-200 flex items-center justify-between gap-2">
+              <span className="truncate">已调用系统下载器获取新版本</span>
+              <a
+                href={downloadUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200 underline shrink-0"
+              >
+                <span>手动打开</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          )}
+        </div>
+
+        <div className="shrink-0 px-4 py-3 sm:px-5 sm:py-3.5 border-t border-slate-800 bg-slate-950/60 flex items-center gap-2 sm:gap-2.5 text-xs">
+          <button
+            type="button"
+            onClick={dismissModal}
+            className="flex-1 py-2.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-800 text-slate-300 font-medium cursor-pointer"
+          >
+            稍后提醒
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleUpdateClick()}
+            className="flex-[1.6] py-2.5 px-3 sm:px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+          >
+            {downloading ? (
+              <>
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span className="truncate">正在拉起下载...</span>
+              </>
+            ) : (
+              <>
+                <ArrowDownToLine className="w-4 h-4 shrink-0" />
+                <span className="truncate">{meta.actionText}</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
     </div>

@@ -6,6 +6,7 @@ import {
   detectClientPlatform,
   fetchLatestReleaseManifest,
   getCurrentClientVersion,
+  resolveClientRuntimePlatform,
   resolveDownloadUrlForPlatform,
   triggerClientDownload,
 } from '../services/clientUpdater';
@@ -51,7 +52,7 @@ async function runUpdateCheck(force = false): Promise<{
   hasUpdate: boolean;
   latestVersion?: string;
 }> {
-  const platform = detectClientPlatform();
+  const platform = await resolveClientRuntimePlatform();
   sharedState.platform = platform;
 
   // Strictly disabled on standard web browsers
@@ -113,6 +114,13 @@ export function useClientUpdater() {
     sharedState.platform = platform;
 
     if (platform !== 'web') {
+      void resolveClientRuntimePlatform().then((exactPlatform) => {
+        if (exactPlatform !== sharedState.platform) {
+          sharedState.platform = exactPlatform;
+          emit();
+        }
+      });
+
       if (!initialCheckScheduled) {
         initialCheckScheduled = true;
         window.setTimeout(() => {
@@ -129,8 +137,13 @@ export function useClientUpdater() {
           }
         };
 
+        const onOnline = () => {
+          void runUpdateCheck(false);
+        };
+
         document.addEventListener('visibilitychange', onForeground);
         window.addEventListener('focus', onForeground);
+        window.addEventListener('online', onOnline);
       }
     }
 
@@ -140,6 +153,13 @@ export function useClientUpdater() {
   }, []);
 
   const checkNow = useCallback(() => runUpdateCheck(true), []);
+
+  const openUpdateModal = useCallback(() => {
+    if (sharedState.platform !== 'web' && sharedState.hasUpdate && sharedState.latestRelease) {
+      sharedState.modalOpen = true;
+      emit();
+    }
+  }, []);
 
   const dismissModal = useCallback(() => {
     if (sharedState.latestRelease?.version) {
@@ -158,6 +178,7 @@ export function useClientUpdater() {
     ...sharedState,
     isNativeClient: sharedState.platform !== 'web',
     checkNow,
+    openUpdateModal,
     dismissModal,
     startDownload,
   };

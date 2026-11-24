@@ -9,6 +9,23 @@ fn get_app_version(app: tauri::AppHandle) -> String {
 }
 
 #[tauri::command]
+fn get_client_platform_info() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "windows-exe"
+    } else if cfg!(target_os = "linux") {
+        if std::env::var_os("APPIMAGE").is_some() || std::env::var_os("APPDIR").is_some() {
+            "linux-appimage"
+        } else if std::path::Path::new("/etc/debian_version").exists() {
+            "linux-deb"
+        } else {
+            "linux-appimage"
+        }
+    } else {
+        "web"
+    }
+}
+
+#[tauri::command]
 async fn fetch_remote_json(url: String) -> Result<String, String> {
     if !url.starts_with(ALLOWED_REPO_PREFIX) {
         return Err("Blocked untrusted update URL".to_string());
@@ -50,6 +67,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             get_app_version,
+            get_client_platform_info,
             fetch_remote_json,
             open_download_url
         ])
