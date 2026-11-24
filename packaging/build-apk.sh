@@ -34,6 +34,7 @@ if [ -z "${ANDROID_HOME:-}" ] || [ ! -d "${ANDROID_HOME}" ]; then
 fi
 export ANDROID_SDK_ROOT="${ANDROID_HOME}"
 
+cd "${ROOT_DIR}"
 APP_VERSION="$(node -e 'console.log(require("./package.json").version || "1.0.0")' 2>/dev/null || echo "1.0.0")"
 VERSION_CODE="$(node -e '
   const v = (require("./package.json").version || "1.0.0").split("-")[0].split(".").map(Number);
@@ -42,7 +43,6 @@ VERSION_CODE="$(node -e '
 ')"
 
 echo "[1/6] 生成图标并构建前端离线资源包 (v${APP_VERSION})..."
-cd "${ROOT_DIR}"
 node scripts/generate-icons.mjs
 npm run build
 
@@ -52,7 +52,7 @@ cp -r "${ROOT_DIR}/dist" "${CAP_DIR}/www"
 
 echo "[3/6] 安装 Capacitor 依赖并同步 Android 工程..."
 cd "${CAP_DIR}"
-npm install
+npm install --legacy-peer-deps
 
 if [ ! -f "${CAP_DIR}/android/gradlew" ]; then
   rm -rf "${CAP_DIR}/android"

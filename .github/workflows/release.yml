@@ -60,7 +60,7 @@ jobs:
             COMMIT_NOTES="- 发布 v${RELEASE_VERSION} 客户端构建"
           fi
 
-          echo "${COMMIT_NOTES}" > /tmp/release-notes.txt
+          printf '%s\n' "${COMMIT_NOTES}" > /tmp/release-notes.txt
           echo "version=${RELEASE_VERSION}" >> "${GITHUB_OUTPUT}"
           echo "tag=v${RELEASE_VERSION}" >> "${GITHUB_OUTPUT}"
 
@@ -84,7 +84,7 @@ jobs:
           node-version: '22'
 
       - name: Install npm dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Sync version (${{ needs.resolve-version.outputs.version }})
         run: node scripts/sync-version.mjs "${{ needs.resolve-version.outputs.version }}"
@@ -144,16 +144,50 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android 34 SDK components
+      - name: Configure Android 34 SDK
         run: |
+          SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          if [ ! -d "${SDK_DIR}" ] && [ -d "/opt/android-sdk" ]; then
+            SDK_DIR="/opt/android-sdk"
+          fi
+          echo "ANDROID_HOME=${SDK_DIR}" >> "${GITHUB_ENV}"
+          echo "ANDROID_SDK_ROOT=${SDK_DIR}" >> "${GITHUB_ENV}"
+
+          CMDLINE_BIN="${SDK_DIR}/cmdline-tools/latest/bin"
+          if [ ! -d "${CMDLINE_BIN}" ]; then
+            CMDLINE_BIN="$(find "${SDK_DIR}/cmdline-tools" -maxdepth 2 -type d -name bin 2>/dev/null | sort -V | tail -n 1 || true)"
+          fi
+          if [ -z "${CMDLINE_BIN}" ] || [ ! -x "${CMDLINE_BIN}/sdkmanager" ]; then
+            echo "sdkmanager not found under ${SDK_DIR}"
+            exit 1
+          fi
+
+          echo "${CMDLINE_BIN}" >> "${GITHUB_PATH}"
+          echo "${SDK_DIR}/platform-tools" >> "${GITHUB_PATH}"
+          export PATH="${CMDLINE_BIN}:${SDK_DIR}/platform-tools:${PATH}"
+
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+          MISSING_PKGS=""
+          if [ ! -d "${SDK_DIR}/platforms/android-34" ]; then
+            MISSING_PKGS="${MISSING_PKGS} platforms;android-34"
+          fi
+          if [ ! -d "${SDK_DIR}/build-tools/34.0.0" ]; then
+            MISSING_PKGS="${MISSING_PKGS} build-tools;34.0.0"
+          fi
+          if [ ! -d "${SDK_DIR}/platform-tools" ]; then
+            MISSING_PKGS="${MISSING_PKGS} platform-tools"
+          fi
+
+          if [ -n "${MISSING_PKGS}" ]; then
+            echo "Installing missing Android SDK components:${MISSING_PKGS}"
+            sdkmanager ${MISSING_PKGS}
+          else
+            echo "Android 34 SDK components already installed."
+          fi
 
       - name: Install root npm dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Sync version (${{ needs.resolve-version.outputs.version }})
         run: node scripts/sync-version.mjs "${{ needs.resolve-version.outputs.version }}"
