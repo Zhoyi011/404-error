@@ -212,11 +212,9 @@ jobs:
           cat release-assets/version.json
           ls -lh release-assets/
 
-      - name: Create or Update GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Prepare release body
         env:
           RELEASE_TAG: ${{ needs.resolve-version.outputs.tag }}
-          RELEASE_VERSION: ${{ needs.resolve-version.outputs.version }}
         run: |
           NOTES_CONTENT="$(cat release-assets/release-notes.txt 2>/dev/null || echo "- 发布新版本")"
           {
@@ -228,6 +226,9 @@ jobs:
             echo '- **Windows (.exe)**：`404-error-windows.exe`（安装版） / `404-error-windows-portable.exe`（单文件绿色版）'
             echo '- **Android (.apk)**：`404-error-android.apk`'
           } > /tmp/release-body.md
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve-version.outputs.tag }}
           name: "伪人入侵 ${{ needs.resolve-version.outputs.tag }}"

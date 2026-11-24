@@ -29,10 +29,10 @@
 
 ### Android APK 正式签名密钥（强烈建议配置）
 若暂未配置，流水线会自动降级产出可安装的 **Debug 签名 APK**；配置后将自动产出正式签名 **Release APK**：
-1. `ANDROID_KEYSTORE_BASE64`：`.keystore` 文件的 Base64 编码字符串
-2. `ANDROID_KEYSTORE_PASSWORD`：Keystore 密码
-3. `ANDROID_KEY_ALIAS`：密钥别名（例如 `horror404`）
-4. `ANDROID_KEY_PASSWORD`：密钥密码
+1. `KEYSTORE_BASE64`：`.keystore` 文件的 Base64 编码字符串
+2. `KEYSTORE_PASSWORD`：Keystore 密码
+3. `KEY_ALIAS`：密钥别名（例如 `horror404`）
+4. `KEY_PASSWORD`：密钥密码
 
 **在本地终端生成密钥与 Base64 示例**：
 ```bash
