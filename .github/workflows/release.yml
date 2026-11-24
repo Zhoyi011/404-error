@@ -219,15 +219,15 @@ jobs:
           RELEASE_VERSION: ${{ needs.resolve-version.outputs.version }}
         run: |
           NOTES_CONTENT="$(cat release-assets/release-notes.txt 2>/dev/null || echo "- 发布新版本")"
-          cat <<EOF > /tmp/release-body.md
-          ## 伪人入侵 ${RELEASE_TAG}
-
-          ${NOTES_CONTENT}
-
-          ### 安装包说明
-          - **Windows (.exe)**：\`404-error-windows.exe\`（安装版） / \`404-error-windows-portable.exe\`（单文件绿色版）
-          - **Android (.apk)**：\`404-error-android.apk\`
-          EOF
+          {
+            echo "## 伪人入侵 ${RELEASE_TAG}"
+            echo ""
+            echo "${NOTES_CONTENT}"
+            echo ""
+            echo "### 安装包说明"
+            echo '- **Windows (.exe)**：`404-error-windows.exe`（安装版） / `404-error-windows-portable.exe`（单文件绿色版）'
+            echo '- **Android (.apk)**：`404-error-android.apk`'
+          } > /tmp/release-body.md
         with:
           tag_name: ${{ needs.resolve-version.outputs.tag }}
           name: "伪人入侵 ${{ needs.resolve-version.outputs.tag }}"
