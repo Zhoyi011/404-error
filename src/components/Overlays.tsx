@@ -3,8 +3,12 @@ import { AnimatePresence, motion } from 'motion/react';
 import { AlertTriangle, Camera, ChevronRight, Eye, ShieldAlert, X } from 'lucide-react';
 import { useGame } from '../context/GameContext';
 import { useIsMobile } from '../hooks/useIsMobile';
-import { CATEGORY_LABELS, ENDINGS } from '../data/endings';
-import { ENDING_STORIES } from '../data/endingStories';
+import { CATEGORY_LABELS } from '../data/endings';
+import {
+  adaptCopyForMobile,
+  getEndingDefinition,
+  getEndingStoryBeats,
+} from '../utils/mobileAdaptation';
 import { soundEngine } from '../utils/audio';
 
 export const Overlays: React.FC = () => {
@@ -33,8 +37,8 @@ export const Overlays: React.FC = () => {
   const [crashProgress, setCrashProgress] = useState(0);
   const [crashStageTick, setCrashStageTick] = useState(0);
 
-  const endingDef = currentEndingId ? ENDINGS[currentEndingId] : null;
-  const storyBeats = currentEndingId ? ENDING_STORIES[currentEndingId] : [];
+  const endingDef = currentEndingId ? getEndingDefinition(currentEndingId, isMobile) : null;
+  const storyBeats = currentEndingId ? getEndingStoryBeats(currentEndingId, isMobile) : [];
   const dur = system.animations ? 0.18 : 0;
   const isTerminated =
     phase === 'ENDED' ||
@@ -98,7 +102,9 @@ export const Overlays: React.FC = () => {
       : cameraDenyCount === 1
         ? '验证服务仍在等待（已拒绝 1/3 次）。你拒绝之后，网页背景里的阴影似乎往前移动了一步。'
         : cameraDenyCount === 2
-          ? '已拒绝 2/3 次。电脑摄像头旁的指示灯突然自己闪烁起来……'
+          ? isMobile
+            ? '已拒绝 2/3 次。手机前置摄像头旁的指示灯突然自己闪烁起来……'
+            : '已拒绝 2/3 次。电脑摄像头旁的指示灯突然自己闪烁起来……'
           : '已拒绝 3 次。镜头背后有什么东西正屏住呼吸盯着你……';
 
   const currentBeat = storyBeats[storyIdx] ?? storyBeats[0];
@@ -172,9 +178,11 @@ export const Overlays: React.FC = () => {
           >
             <div className="flex items-center gap-2 text-rose-400 text-xs font-bold">
               <ShieldAlert className="w-4 h-4 shrink-0" />
-              <span>系统安全拦截提醒 · {activeAnomaly.title}</span>
+              <span>系统安全拦截提醒 · {adaptCopyForMobile(activeAnomaly.title, isMobile)}</span>
             </div>
-            <p className="text-xs text-slate-300 leading-relaxed">{activeAnomaly.detail}</p>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              {adaptCopyForMobile(activeAnomaly.detail, isMobile)}
+            </p>
             <div className="flex gap-2 pt-1">
               <button
                 type="button"
@@ -394,9 +402,6 @@ export const Overlays: React.FC = () => {
               aria-hidden="true"
               className={`pointer-events-none absolute inset-0 ${beatGlowClass}`}
             />
-            {system.crtEffect && !system.photosensitiveSafe && (
-              <div aria-hidden="true" className="pointer-events-none crt-scanlines absolute inset-0" />
-            )}
 
             {/* Top Controls */}
             <div className="relative z-10 flex items-center justify-between">
@@ -460,7 +465,7 @@ export const Overlays: React.FC = () => {
 
             {/* Bottom Prompt */}
             <div className="relative z-10 flex items-center justify-between max-w-2xl mx-auto w-full text-xs text-slate-400">
-              <span>点击屏幕或按空格键继续</span>
+              <span>{isMobile ? '点击屏幕继续' : '点击屏幕或按空格键继续'}</span>
               <button
                 type="button"
                 onClick={(e) => {
@@ -494,7 +499,7 @@ export const Overlays: React.FC = () => {
               className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 p-7 shadow-2xl space-y-5 text-center"
             >
               <div className="text-xs font-semibold tracking-wide text-amber-400 font-mono-tabular">
-                {CATEGORY_LABELS[endingDef.category]} · 结局 #{endingDef.id.toString().padStart(2, '0')} · 图鉴 {unlockedEndings.length}/40
+                {CATEGORY_LABELS[endingDef.category]} · 结局 #{endingDef.id.toString().padStart(2, '0')} · 图鉴 {unlockedEndings.length}/50
               </div>
 
               <div className="text-4xl">{endingDef.icon}</div>

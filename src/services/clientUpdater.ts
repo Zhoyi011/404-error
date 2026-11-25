@@ -1,12 +1,26 @@
+import {
+  CURATED_CHINESE_RELEASES,
+  ReleaseChangelogSections,
+  buildBaselineLatestTemplate,
+  parseStructuredReleaseNotes,
+} from '../data/releaseHistoryFallback';
+
+export type { ReleaseChangelogSections } from '../data/releaseHistoryFallback';
+
 export const GITHUB_REPO = 'Zhoyi011/404-error';
 export const GITHUB_REPO_URL = `https://github.com/${GITHUB_REPO}`;
+export const GITHUB_RELEASES_PAGE = `${GITHUB_REPO_URL}/releases`;
 export const GITHUB_RELEASES_LATEST_PAGE = `${GITHUB_REPO_URL}/releases/latest`;
+export const GITHUB_RELEASES_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=15`;
 export const VERSION_JSON_URL = `${GITHUB_REPO_URL}/releases/latest/download/version.json`;
 export const DEFAULT_WINDOWS_EXE_URL = `${GITHUB_REPO_URL}/releases/latest/download/404-error-windows.exe`;
 export const DEFAULT_WINDOWS_PORTABLE_EXE_URL = `${GITHUB_REPO_URL}/releases/latest/download/404-error-windows-portable.exe`;
 export const DEFAULT_LINUX_APPIMAGE_URL = `${GITHUB_REPO_URL}/releases/latest/download/404-error-linux.AppImage`;
 export const DEFAULT_LINUX_DEB_URL = `${GITHUB_REPO_URL}/releases/latest/download/404-error-linux.deb`;
 export const DEFAULT_ANDROID_APK_URL = `${GITHUB_REPO_URL}/releases/latest/download/404-error-android.apk`;
+
+const RELEASE_HISTORY_CACHE_KEY = '404_error_release_history_v2';
+const RELEASE_HISTORY_CACHE_TTL_MS = 10 * 60 * 1000;
 
 export type WebDownloadOS = 'Windows' | 'Linux' | 'Android';
 
@@ -290,8 +304,15 @@ export function isDesktopTauriPlatform(platform: ClientRuntimePlatform): boolean
 export interface ReleaseVersionManifest {
   version: string;
   tag?: string;
+  name?: string;
   releaseDate?: string;
+  summary?: string;
   notes?: string;
+  changelog?: string[];
+  sections?: Partial<ReleaseChangelogSections>;
+  notesSource?: string;
+  releaseUrl?: string;
+  releasesApiUrl?: string;
   downloads?: {
     windows?: string;
     windowsPortable?: string;
@@ -309,6 +330,37 @@ export interface ReleaseVersionManifest {
     };
     android?: { url?: string; fileName?: string };
   };
+}
+
+export interface ReleaseAssetLinks {
+  windows?: string;
+  windowsPortable?: string;
+  linuxAppImage?: string;
+  linuxDeb?: string;
+  android?: string;
+}
+
+export interface ReleaseHistoryEntry {
+  version: string;
+  tag: string;
+  name: string;
+  releaseDate: string;
+  isLatest?: boolean;
+  isPrerelease?: boolean;
+  summary?: string;
+  notes: string;
+  changelog: string[];
+  sections?: ReleaseChangelogSections;
+  releaseUrl: string;
+  assets: ReleaseAssetLinks;
+  source: 'github-api' | 'manifest' | 'cache' | 'fallback';
+}
+
+export interface ReleaseHistoryResult {
+  entries: ReleaseHistoryEntry[];
+  source: 'github-api' | 'cache' | 'fallback';
+  syncedAt: number;
+  isOfflineOrLimited: boolean;
 }
 
 interface TauriGlobal {
@@ -490,6 +542,10 @@ export function compareVersions(remoteVersion: string, localVersion: string): nu
   return 0;
 }
 
+export function parseChangelogItems(rawBody?: string, existingChangelog?: string[]): string[] {
+  return parseStructuredReleaseNotes(rawBody, existingChangelog).changelog;
+}
+
 export function resolveDownloadUrlForPlatform(
   manifest: ReleaseVersionManifest,
   platform: ClientRuntimePlatform
@@ -525,6 +581,40 @@ export function resolveDownloadUrlForPlatform(
   return GITHUB_RELEASES_LATEST_PAGE;
 }
 
+async function fetchRemoteText(
+  url: string,
+  platform: ClientRuntimePlatform,
+  isGitHubApi = false
+): Promise<string | null> {
+  if (isDesktopTauriPlatform(platform)) {
+    const tauriRes = await invokeTauri<string>('fetch_remote_json', { url });
+    if (tauriRes && tauriRes.trim().length > 0) {
+      return tauriRes;
+    }
+  } else if (platform === 'android-apk') {
+    const bridgeText = getExtendedWindow().AndroidClientBridge?.fetchRemoteJson?.(url);
+    if (bridgeText && bridgeText.trim().length > 0) {
+      return bridgeText;
+    }
+  }
+
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 7000);
+  try {
+    const response = await fetch(url, {
+      cache: isGitHubApi ? 'default' : 'no-store',
+      headers: isGitHubApi ? { Accept: 'application/vnd.github+json' } : undefined,
+      signal: controller.signal,
+    });
+    if (!response.ok) return null;
+    return await response.text();
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 export async function fetchLatestReleaseManifest(
   platform: ClientRuntimePlatform
 ): Promise<ReleaseVersionManifest | null> {
@@ -532,43 +622,393 @@ export async function fetchLatestReleaseManifest(
   if (typeof navigator !== 'undefined' && !navigator.onLine) return null;
 
   const cacheBustedUrl = `${VERSION_JSON_URL}?t=${Date.now()}`;
-  let rawText: string | null = null;
-
-  if (isDesktopTauriPlatform(platform)) {
-    rawText = await invokeTauri<string>('fetch_remote_json', { url: cacheBustedUrl });
-  } else if (platform === 'android-apk') {
-    const bridgeText = getExtendedWindow().AndroidClientBridge?.fetchRemoteJson?.(cacheBustedUrl);
-    if (bridgeText && bridgeText.trim().startsWith('{')) {
-      rawText = bridgeText;
-    }
-  }
-
-  if (!rawText) {
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), 6000);
-    try {
-      const response = await fetch(cacheBustedUrl, {
-        cache: 'no-store',
-        signal: controller.signal,
-      });
-      if (!response.ok) return null;
-      rawText = await response.text();
-    } catch {
-      return null;
-    } finally {
-      window.clearTimeout(timer);
-    }
-  }
+  const rawText = await fetchRemoteText(cacheBustedUrl, platform, false);
+  if (!rawText) return null;
 
   try {
     const parsed = JSON.parse(rawText) as ReleaseVersionManifest;
     if (!parsed || typeof parsed.version !== 'string' || !parseSemver(parsed.version)) {
       return null;
     }
+    const structured = parseStructuredReleaseNotes(
+      parsed.notes,
+      parsed.changelog,
+      parsed.sections,
+      parsed.summary
+    );
+    return {
+      ...parsed,
+      summary: structured.summary,
+      sections: structured.sections,
+      changelog: structured.changelog,
+      releaseUrl:
+        parsed.releaseUrl ||
+        `${GITHUB_REPO_URL}/releases/tag/${parsed.tag || `v${parsed.version}`}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function getFallbackReleaseHistory(): ReleaseHistoryEntry[] {
+  const localVersion = (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0')
+    .replace(/^v/i, '')
+    .trim();
+
+  const latestTemplate = buildBaselineLatestTemplate(localVersion);
+  const latestChangelog = [
+    ...latestTemplate.sections.added,
+    ...latestTemplate.sections.improved,
+    ...latestTemplate.sections.fixed,
+  ];
+
+  const entries: ReleaseHistoryEntry[] = [
+    {
+      version: localVersion,
+      tag: `v${localVersion}`,
+      name: latestTemplate.name,
+      releaseDate: latestTemplate.releaseDate,
+      isLatest: true,
+      summary: latestTemplate.summary,
+      sections: latestTemplate.sections,
+      notes: latestChangelog.map((line) => `- ${line}`).join('\n'),
+      changelog: latestChangelog,
+      releaseUrl: GITHUB_RELEASES_LATEST_PAGE,
+      assets: {
+        windows: DEFAULT_WINDOWS_EXE_URL,
+        windowsPortable: DEFAULT_WINDOWS_PORTABLE_EXE_URL,
+        linuxAppImage: DEFAULT_LINUX_APPIMAGE_URL,
+        linuxDeb: DEFAULT_LINUX_DEB_URL,
+        android: DEFAULT_ANDROID_APK_URL,
+      },
+      source: 'fallback',
+    },
+  ];
+
+  if (compareVersions(localVersion, '1.0.0') > 0 && CURATED_CHINESE_RELEASES['1.0.0']) {
+    const v1 = CURATED_CHINESE_RELEASES['1.0.0'];
+    const v1Changelog = [
+      ...v1.sections.added,
+      ...v1.sections.improved,
+      ...v1.sections.fixed,
+    ];
+    entries.push({
+      version: '1.0.0',
+      tag: 'v1.0.0',
+      name: v1.name,
+      releaseDate: v1.releaseDate,
+      isLatest: false,
+      summary: v1.summary,
+      sections: v1.sections,
+      notes: v1Changelog.map((line) => `- ${line}`).join('\n'),
+      changelog: v1Changelog,
+      releaseUrl: `${GITHUB_REPO_URL}/releases/tag/v1.0.0`,
+      assets: {
+        windows: `${GITHUB_REPO_URL}/releases/download/v1.0.0/404-error-windows.exe`,
+        windowsPortable: `${GITHUB_REPO_URL}/releases/download/v1.0.0/404-error-windows-portable.exe`,
+        linuxAppImage: `${GITHUB_REPO_URL}/releases/download/v1.0.0/404-error-linux.AppImage`,
+        linuxDeb: `${GITHUB_REPO_URL}/releases/download/v1.0.0/404-error-linux.deb`,
+        android: `${GITHUB_REPO_URL}/releases/download/v1.0.0/404-error-android.apk`,
+      },
+      source: 'fallback',
+    });
+  }
+
+  return entries;
+}
+
+interface StoredReleaseHistoryCache {
+  syncedAt: number;
+  entries: ReleaseHistoryEntry[];
+}
+
+function readReleaseHistoryCache(): StoredReleaseHistoryCache | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(RELEASE_HISTORY_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredReleaseHistoryCache;
+    if (!parsed || !Array.isArray(parsed.entries) || parsed.entries.length === 0) {
+      return null;
+    }
     return parsed;
   } catch {
     return null;
   }
+}
+
+function writeReleaseHistoryCache(entries: ReleaseHistoryEntry[], syncedAt: number) {
+  if (typeof window === 'undefined' || entries.length === 0) return;
+  try {
+    const payload: StoredReleaseHistoryCache = { syncedAt, entries };
+    window.localStorage.setItem(RELEASE_HISTORY_CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore quota errors
+  }
+}
+
+interface GitHubReleaseAsset {
+  name?: string;
+  browser_download_url?: string;
+}
+
+interface GitHubReleasePayload {
+  tag_name?: string;
+  name?: string;
+  body?: string;
+  draft?: boolean;
+  prerelease?: boolean;
+  published_at?: string;
+  created_at?: string;
+  html_url?: string;
+  assets?: GitHubReleaseAsset[];
+}
+
+function mapGitHubReleaseToEntry(
+  raw: GitHubReleasePayload,
+  index: number
+): ReleaseHistoryEntry | null {
+  const tag = (raw.tag_name || '').trim();
+  const version = tag.replace(/^v/i, '').trim();
+  if (!tag || !version || !parseSemver(version)) {
+    return null;
+  }
+
+  const assetList = Array.isArray(raw.assets) ? raw.assets : [];
+  const assets: ReleaseAssetLinks = {};
+
+  for (const asset of assetList) {
+    const name = (asset.name || '').toLowerCase();
+    const url = asset.browser_download_url || '';
+    if (!url) continue;
+
+    if (name === '404-error-windows.exe' || (name.endsWith('-setup.exe') && !assets.windows)) {
+      assets.windows = url;
+    } else if (
+      name === '404-error-windows-portable.exe' ||
+      (name.endsWith('.exe') && name.includes('portable') && !assets.windowsPortable)
+    ) {
+      assets.windowsPortable = url;
+    } else if (
+      name === '404-error-linux.appimage' ||
+      (name.endsWith('.appimage') && !assets.linuxAppImage)
+    ) {
+      assets.linuxAppImage = url;
+    } else if (name === '404-error-linux.deb' || (name.endsWith('.deb') && !assets.linuxDeb)) {
+      assets.linuxDeb = url;
+    } else if (name === '404-error-android.apk' || (name.endsWith('.apk') && !assets.android)) {
+      assets.android = url;
+    }
+  }
+
+  let structured = parseStructuredReleaseNotes(raw.body);
+  const curated = CURATED_CHINESE_RELEASES[version];
+  const rawHasNoChinese = !raw.body || !/[\u4e00-\u9fff]/.test(raw.body);
+  if (curated && (rawHasNoChinese || structured.changelog.length <= 1)) {
+    const curatedFlat = [
+      ...curated.sections.added,
+      ...curated.sections.improved,
+      ...curated.sections.fixed,
+    ];
+    structured = {
+      summary: curated.summary,
+      sections: curated.sections,
+      changelog: curatedFlat,
+    };
+  }
+
+  return {
+    version,
+    tag,
+    name: (raw.name || '').trim() || `伪人入侵 ${tag}`,
+    releaseDate: raw.published_at || raw.created_at || new Date().toISOString(),
+    isLatest: index === 0,
+    isPrerelease: Boolean(raw.prerelease),
+    summary: structured.summary,
+    sections: structured.sections,
+    notes: (raw.body || '').trim() || structured.changelog.map((c) => `- ${c}`).join('\n'),
+    changelog: structured.changelog,
+    releaseUrl: raw.html_url || `${GITHUB_REPO_URL}/releases/tag/${tag}`,
+    assets,
+    source: 'github-api',
+  };
+}
+
+export function manifestToHistoryEntry(
+  manifest: ReleaseVersionManifest,
+  isLatest = true
+): ReleaseHistoryEntry {
+  const version = manifest.version.replace(/^v/i, '').trim();
+  const tag = manifest.tag || `v${version}`;
+  const structured = parseStructuredReleaseNotes(
+    manifest.notes,
+    manifest.changelog,
+    manifest.sections,
+    manifest.summary
+  );
+  return {
+    version,
+    tag,
+    name: manifest.name || `伪人入侵 ${tag}`,
+    releaseDate: manifest.releaseDate || new Date().toISOString(),
+    isLatest,
+    summary: structured.summary,
+    sections: structured.sections,
+    notes: (manifest.notes || '').trim() || structured.changelog.map((c) => `- ${c}`).join('\n'),
+    changelog: structured.changelog,
+    releaseUrl: manifest.releaseUrl || `${GITHUB_REPO_URL}/releases/tag/${tag}`,
+    assets: {
+      windows: manifest.platforms?.windows?.url || manifest.downloads?.windows,
+      windowsPortable:
+        manifest.platforms?.windows?.portableUrl || manifest.downloads?.windowsPortable,
+      linuxAppImage:
+        manifest.platforms?.linux?.appImageUrl || manifest.downloads?.linuxAppImage,
+      linuxDeb: manifest.platforms?.linux?.debUrl || manifest.downloads?.linuxDeb,
+      android: manifest.platforms?.android?.url || manifest.downloads?.android,
+    },
+    source: 'manifest',
+  };
+}
+
+export function mergeReleaseHistoryWithManifest(
+  entries: ReleaseHistoryEntry[],
+  manifest: ReleaseVersionManifest | null
+): ReleaseHistoryEntry[] {
+  if (!manifest) return entries;
+  const manifestEntry = manifestToHistoryEntry(manifest, true);
+  const existingIdx = entries.findIndex(
+    (item) => item.version.replace(/^v/i, '') === manifestEntry.version
+  );
+
+  if (existingIdx >= 0) {
+    const existing = entries[existingIdx];
+    const preferManifestNotes =
+      Boolean(manifestEntry.sections) ||
+      manifestEntry.changelog.length >= existing.changelog.length;
+    const merged: ReleaseHistoryEntry = {
+      ...existing,
+      ...manifestEntry,
+      assets: {
+        windows: existing.assets.windows || manifestEntry.assets.windows,
+        windowsPortable: existing.assets.windowsPortable || manifestEntry.assets.windowsPortable,
+        linuxAppImage: existing.assets.linuxAppImage || manifestEntry.assets.linuxAppImage,
+        linuxDeb: existing.assets.linuxDeb || manifestEntry.assets.linuxDeb,
+        android: existing.assets.android || manifestEntry.assets.android,
+      },
+      summary: manifestEntry.summary || existing.summary,
+      sections: preferManifestNotes ? manifestEntry.sections || existing.sections : existing.sections,
+      changelog: preferManifestNotes ? manifestEntry.changelog : existing.changelog,
+      isLatest: existingIdx === 0,
+    };
+    const next = [...entries];
+    next[existingIdx] = merged;
+    return next;
+  }
+
+  const updated = [manifestEntry, ...entries].sort((a, b) => compareVersions(b.version, a.version));
+  return updated.map((item, idx) => ({ ...item, isLatest: idx === 0 }));
+}
+
+export async function fetchReleaseHistory(
+  platform: ClientRuntimePlatform,
+  options?: { forceRefresh?: boolean; knownLatestManifest?: ReleaseVersionManifest | null }
+): Promise<ReleaseHistoryResult> {
+  const forceRefresh = Boolean(options?.forceRefresh);
+  const knownManifest = options?.knownLatestManifest ?? null;
+  const cached = readReleaseHistoryCache();
+  const now = Date.now();
+
+  if (
+    !forceRefresh &&
+    cached &&
+    now - cached.syncedAt < RELEASE_HISTORY_CACHE_TTL_MS
+  ) {
+    return {
+      entries: mergeReleaseHistoryWithManifest(
+        cached.entries.map((entry, idx) => ({ ...entry, isLatest: idx === 0, source: 'cache' })),
+        knownManifest
+      ),
+      source: 'cache',
+      syncedAt: cached.syncedAt,
+      isOfflineOrLimited: false,
+    };
+  }
+
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    if (cached) {
+      return {
+        entries: mergeReleaseHistoryWithManifest(
+          cached.entries.map((entry, idx) => ({ ...entry, isLatest: idx === 0, source: 'cache' })),
+          knownManifest
+        ),
+        source: 'cache',
+        syncedAt: cached.syncedAt,
+        isOfflineOrLimited: true,
+      };
+    }
+    return {
+      entries: mergeReleaseHistoryWithManifest(getFallbackReleaseHistory(), knownManifest),
+      source: 'fallback',
+      syncedAt: now,
+      isOfflineOrLimited: true,
+    };
+  }
+
+  const rawApiText = await fetchRemoteText(GITHUB_RELEASES_API_URL, platform, true);
+  if (rawApiText) {
+    try {
+      const parsed = JSON.parse(rawApiText);
+      if (Array.isArray(parsed)) {
+        const mapped = parsed
+          .filter((item): item is GitHubReleasePayload => Boolean(item) && !item.draft)
+          .map((item, idx) => mapGitHubReleaseToEntry(item, idx))
+          .filter((item): item is ReleaseHistoryEntry => item !== null);
+
+        if (mapped.length > 0) {
+          const merged = mergeReleaseHistoryWithManifest(mapped, knownManifest);
+          writeReleaseHistoryCache(merged, now);
+          return {
+            entries: merged,
+            source: 'github-api',
+            syncedAt: now,
+            isOfflineOrLimited: false,
+          };
+        }
+      }
+    } catch {
+      // Fall through to manifest / cache / fallback
+    }
+  }
+
+  // Fallback to known manifest or version.json if on native client
+  if (knownManifest) {
+    const merged = mergeReleaseHistoryWithManifest(
+      cached ? cached.entries : getFallbackReleaseHistory(),
+      knownManifest
+    );
+    return {
+      entries: merged,
+      source: cached ? 'cache' : 'fallback',
+      syncedAt: cached?.syncedAt || now,
+      isOfflineOrLimited: !cached,
+    };
+  }
+
+  if (cached) {
+    return {
+      entries: cached.entries.map((entry, idx) => ({ ...entry, isLatest: idx === 0, source: 'cache' })),
+      source: 'cache',
+      syncedAt: cached.syncedAt,
+      isOfflineOrLimited: true,
+    };
+  }
+
+  return {
+    entries: getFallbackReleaseHistory(),
+    source: 'fallback',
+    syncedAt: now,
+    isOfflineOrLimited: true,
+  };
 }
 
 export async function triggerClientDownload(

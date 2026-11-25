@@ -1,8 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Send } from 'lucide-react';
 import { useGame } from '../../context/GameContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { adaptCopyForMobile } from '../../utils/mobileAdaptation';
 
 export const ChatApp: React.FC = () => {
+  const isMobile = useIsMobile();
   const {
     chatMessages,
     newsChoice,
@@ -74,7 +77,7 @@ export const ChatApp: React.FC = () => {
                           : 'bg-slate-800 text-slate-100 border-slate-700'
                 }`}
               >
-                {msg.text}
+                {adaptCopyForMobile(msg.text, isMobile)}
               </div>
             </div>
           );

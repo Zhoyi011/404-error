@@ -2,6 +2,7 @@ use std::time::Duration;
 use tauri_plugin_opener::OpenerExt;
 
 const ALLOWED_REPO_PREFIX: &str = "https://github.com/Zhoyi011/404-error/";
+const ALLOWED_API_PREFIX: &str = "https://api.github.com/repos/Zhoyi011/404-error/";
 
 #[tauri::command]
 fn get_app_version(app: tauri::AppHandle) -> String {
@@ -27,19 +28,24 @@ fn get_client_platform_info() -> &'static str {
 
 #[tauri::command]
 async fn fetch_remote_json(url: String) -> Result<String, String> {
-    if !url.starts_with(ALLOWED_REPO_PREFIX) {
+    let is_repo_url = url.starts_with(ALLOWED_REPO_PREFIX);
+    let is_api_url = url.starts_with(ALLOWED_API_PREFIX);
+    if !is_repo_url && !is_api_url {
         return Err("Blocked untrusted update URL".to_string());
     }
 
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(6))
+        .timeout(Duration::from_secs(7))
         .user_agent("404-error-desktop/1.0")
         .build()
         .map_err(|e| e.to_string())?;
 
-    let response = client
-        .get(&url)
-        .header("Cache-Control", "no-cache")
+    let mut request = client.get(&url).header("Cache-Control", "no-cache");
+    if is_api_url {
+        request = request.header("Accept", "application/vnd.github+json");
+    }
+
+    let response = request
         .send()
         .await
         .map_err(|e| e.to_string())?;

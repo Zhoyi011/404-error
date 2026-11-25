@@ -11,9 +11,11 @@ import {
   Wifi,
 } from 'lucide-react';
 import { useGame } from '../../context/GameContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { computeSystemMetrics } from '../../utils/systemMetrics';
 
 export const TaskManagerApp: React.FC = () => {
+  const isMobile = useIsMobile();
   const {
     step,
     sanity,
@@ -71,9 +73,13 @@ export const TaskManagerApp: React.FC = () => {
         <div className="flex items-center gap-2.5">
           <Cpu className="w-5 h-5 text-sky-400 shrink-0" />
           <div>
-            <div className="text-sm font-bold">系统任务管理器 · Task Manager</div>
+            <div className="text-sm font-bold">
+              {isMobile ? '手机进程监视 · Process Monitor' : '系统任务管理器 · Task Manager'}
+            </div>
             <div className={`text-[11px] font-mono-tabular ${mutedText}`}>
-              活动窗口：{windowInstances.length} · 物理内存：4.00 GB DDR3 · 精神同步负载：{100 - sanity}%
+              {isMobile
+                ? `后台应用：${windowInstances.length} · 运行内存：4.00 GB LPDDR4 · 精神同步负载：${100 - sanity}%`
+                : `活动窗口：${windowInstances.length} · 物理内存：4.00 GB DDR3 · 精神同步负载：${100 - sanity}%`}
             </div>
           </div>
         </div>
@@ -109,7 +115,9 @@ export const TaskManagerApp: React.FC = () => {
           </div>
         </div>
         <div className={`rounded-xl border p-3 ${cardBg}`}>
-          <div className={`text-[10px] ${mutedText}`}>内存 ({totalUsedGb.toFixed(2)} / 4.00 GB)</div>
+          <div className={`text-[10px] ${mutedText}`}>
+            {isMobile ? '运存' : '内存'} ({totalUsedGb.toFixed(2)} / 4.00 GB)
+          </div>
           <div
             className={`text-lg font-bold mt-0.5 ${
               memPercent >= 85 ? 'text-rose-400' : memPercent > 65 ? 'text-amber-400' : 'text-emerald-400'
@@ -129,8 +137,10 @@ export const TaskManagerApp: React.FC = () => {
           {/* Open Window Apps */}
           <div className={`rounded-xl border p-3.5 space-y-2 ${cardBg}`}>
             <div className="text-xs font-bold flex items-center justify-between">
-              <span>正在运行的应用 ({windowInstances.length})</span>
-              <span className={`text-[11px] ${mutedText}`}>打开越多软件与标签页内存占用越高</span>
+              <span>{isMobile ? `后台驻留应用 (${windowInstances.length})` : `正在运行的应用 (${windowInstances.length})`}</span>
+              <span className={`text-[11px] ${mutedText}`}>
+                {isMobile ? '驻留越多应用与标签页运存占用越高' : '打开越多软件与标签页内存占用越高'}
+              </span>
             </div>
             {windowInstances.length === 0 ? (
               <div className={`text-xs py-2 ${mutedText}`}>暂无其他前景窗口。</div>
@@ -193,7 +203,9 @@ export const TaskManagerApp: React.FC = () => {
                   </span>
                 </div>
                 <div className={`text-[11px] mt-0.5 ${mutedText}`}>
-                  操作系统底层调度内核（强制结束会导致严重蓝屏熔断）
+                  {isMobile
+                    ? '移动操作系统底层调度内核（强制结束会导致严重过热熔断）'
+                    : '操作系统底层调度内核（强制结束会导致严重蓝屏熔断）'}
                 </div>
               </div>
               <button
@@ -300,9 +312,9 @@ export const TaskManagerApp: React.FC = () => {
             <div className="flex justify-between text-xs font-mono-tabular">
               <span className="flex items-center gap-1.5 font-semibold">
                 <Activity className="w-4 h-4 text-sky-400" />
-                <span>Intel Core i3-4130 (2 核 4 线程)</span>
+                <span>{isMobile ? 'A13 Bionic 移动芯片 (6 核)' : 'Intel Core i3-4130 (2 核 4 线程)'}</span>
               </span>
-              <span>{cpuPercent}% · 3.40 GHz</span>
+              <span>{cpuPercent}% · {isMobile ? '2.65 GHz' : '3.40 GHz'}</span>
             </div>
             <div className="h-2.5 rounded-full bg-slate-800 overflow-hidden">
               <div
@@ -316,7 +328,7 @@ export const TaskManagerApp: React.FC = () => {
             <div className="flex justify-between text-xs font-mono-tabular">
               <span className="flex items-center gap-1.5 font-semibold">
                 <HardDrive className="w-4 h-4 text-emerald-400" />
-                <span>物理内存 (DDR3 1600 MHz)</span>
+                <span>{isMobile ? '统一运行内存 (LPDDR4)' : '物理内存 (DDR3 1600 MHz)'}</span>
               </span>
               <span>{totalUsedGb.toFixed(2)} GB / 4.00 GB</span>
             </div>
@@ -346,7 +358,7 @@ export const TaskManagerApp: React.FC = () => {
         <div className={`rounded-xl border p-4 space-y-2 text-xs font-mono-tabular ${cardBg}`}>
           <div className="font-sans font-bold mb-2">开机自启与开放端口监测</div>
           <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 flex justify-between">
-            <span>Windows Security Health</span>
+            <span>{isMobile ? 'iOS Security Health' : 'Windows Security Health'}</span>
             <span className="text-emerald-400">已启用</span>
           </div>
           <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 flex justify-between">

@@ -16,10 +16,12 @@ import {
   Palette,
   Pin,
   PinOff,
+  Radar,
   Radio,
   Settings as SettingsIcon,
   Shield,
   ShoppingBag,
+  Sparkles,
   Terminal,
   Trophy,
   Waves,
@@ -40,6 +42,7 @@ import { Taskbar } from './components/Taskbar';
 import { AchievementsApp } from './components/apps/AchievementsApp';
 import { BrowserApp } from './components/apps/BrowserApp';
 import { ChatApp } from './components/apps/ChatApp';
+import { CleanerApp } from './components/apps/CleanerApp';
 import { EmailApp } from './components/apps/EmailApp';
 import { FilesApp } from './components/apps/FilesApp';
 import { MonitorApp } from './components/apps/MonitorApp';
@@ -49,6 +52,7 @@ import { NotepadApp } from './components/apps/NotepadApp';
 import { RadioApp } from './components/apps/RadioApp';
 import { SecurityApp } from './components/apps/SecurityApp';
 import { SettingsApp } from './components/apps/SettingsApp';
+import { SnifferApp } from './components/apps/SnifferApp';
 import { StoreApp } from './components/apps/StoreApp';
 import { TaskManagerApp } from './components/apps/TaskManagerApp';
 import { TerminalApp } from './components/apps/TerminalApp';
@@ -72,6 +76,8 @@ const STORE_DESKTOP_ICONS: Record<StoreAppId, { id: AppId; label: string; icon: 
   monitor: { id: 'monitor', label: '资源监视器', icon: <Activity className="w-7 h-7 text-emerald-400" /> },
   radio: { id: 'radio', label: '午夜电波', icon: <Radio className="w-7 h-7 text-amber-400" /> },
   files: { id: 'files', label: '深层文件箱', icon: <FolderLock className="w-7 h-7 text-indigo-400" /> },
+  cleaner: { id: 'cleaner', label: '磁盘净化大师', icon: <Sparkles className="w-7 h-7 text-amber-400" /> },
+  sniffer: { id: 'sniffer', label: '深网嗅探仪', icon: <Radar className="w-7 h-7 text-cyan-400" /> },
 };
 
 function getSmallIcon(appId: AppId) {
@@ -108,6 +114,10 @@ function getSmallIcon(appId: AppId) {
       return <Radio className="w-4 h-4 text-amber-400" />;
     case 'files':
       return <FolderLock className="w-4 h-4 text-indigo-400" />;
+    case 'cleaner':
+      return <Sparkles className="w-4 h-4 text-amber-400" />;
+    case 'sniffer':
+      return <Radar className="w-4 h-4 text-cyan-400" />;
   }
 }
 
@@ -145,6 +155,10 @@ function renderAppBody(instance: WindowInstance) {
       return <RadioApp />;
     case 'files':
       return <FilesApp />;
+    case 'cleaner':
+      return <CleanerApp />;
+    case 'sniffer':
+      return <SnifferApp />;
   }
 }
 
@@ -248,6 +262,7 @@ const VirtualDesktop: React.FC = () => {
   };
 
   const brightnessDimOpacity = Math.max(0, Math.min(0.6, (100 - system.brightness) / 115));
+  const activeVisualChaos = phase === 'PLAYING' || phase === 'INVASION';
 
   return (
     <main
@@ -258,8 +273,8 @@ const VirtualDesktop: React.FC = () => {
       }}
       onContextMenu={handleDesktopContextMenu}
       className={`relative w-screen h-screen overflow-hidden flex flex-col ${wallpaperClass} ${
-        step >= 2 && !system.photosensitiveSafe ? 'animate-glitch' : ''
-      } ${desktopShake && !system.photosensitiveSafe ? 'animate-shake' : ''}`}
+        activeVisualChaos && step >= 2 && !system.photosensitiveSafe ? 'animate-glitch' : ''
+      } ${activeVisualChaos && desktopShake && !system.photosensitiveSafe ? 'animate-shake' : ''}`}
     >
       {/* Win11 Bloom Centerpiece Wallpaper Backdrop */}
       <div
@@ -291,8 +306,10 @@ const VirtualDesktop: React.FC = () => {
           className="pointer-events-none fixed inset-0 z-[109] bg-amber-500/15 mix-blend-multiply"
         />
       )}
-      <div aria-hidden="true" className="horror-vignette pointer-events-none fixed inset-0 z-[110]" />
-      {system.crtEffect && (
+      {activeVisualChaos && (
+        <div aria-hidden="true" className="horror-vignette pointer-events-none fixed inset-0 z-[110]" />
+      )}
+      {activeVisualChaos && system.crtEffect && (
         <div aria-hidden="true" className="crt-scanlines pointer-events-none fixed inset-0 z-[111]" />
       )}
 

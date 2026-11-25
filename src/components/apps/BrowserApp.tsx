@@ -33,6 +33,7 @@ import { useIsMobile } from '../../hooks/useIsMobile';
 import { JOB_LISTINGS, SEARCH_CATALOG, WIKI_SECTIONS } from '../../data/worldData';
 import { WindowInstance } from '../../types/game';
 import { soundEngine } from '../../utils/audio';
+import { adaptCopyForMobile } from '../../utils/mobileAdaptation';
 
 function getHostname(url: string): string {
   try {
@@ -57,6 +58,7 @@ export const BrowserApp: React.FC<{ instance: WindowInstance }> = ({ instance })
     downloads,
     unlockedEndings,
     systemMetrics,
+    predictionText,
     openApp,
     addBrowserTab,
     switchBrowserTab,
@@ -591,7 +593,11 @@ export const BrowserApp: React.FC<{ instance: WindowInstance }> = ({ instance })
                 ? 'bg-amber-500/15 text-amber-400'
                 : mutedText
           }`}
-          title={`老电脑 4.00 GB 物理内存占用：${systemMetrics.totalUsedGb.toFixed(2)} GB`}
+          title={
+            isMobile
+              ? `老旧备用机 4.00 GB 运存占用：${systemMetrics.totalUsedGb.toFixed(2)} GB`
+              : `老电脑 4.00 GB 物理内存占用：${systemMetrics.totalUsedGb.toFixed(2)} GB`
+          }
         >
           RAM {systemMetrics.memPercent}%
         </span>
@@ -1391,7 +1397,7 @@ export const BrowserApp: React.FC<{ instance: WindowInstance }> = ({ instance })
                         : 'bg-slate-950/45 border-slate-800/80 text-slate-200'
                     }`}
                   >
-                    {p}
+                    {adaptCopyForMobile(p, isMobile)}
                   </div>
                 ))}
               </div>
@@ -1458,7 +1464,9 @@ export const BrowserApp: React.FC<{ instance: WindowInstance }> = ({ instance })
                       <span>{art.title}</span>
                       <ExternalLink className="w-3.5 h-3.5 shrink-0 opacity-70" />
                     </button>
-                    <p className={`text-xs leading-relaxed ${mutedText}`}>{art.summary}</p>
+                    <p className={`text-xs leading-relaxed ${mutedText}`}>
+                      {adaptCopyForMobile(art.summary, isMobile)}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -1635,6 +1643,11 @@ export const BrowserApp: React.FC<{ instance: WindowInstance }> = ({ instance })
               <p className="text-sm leading-relaxed text-slate-200">
                 对方服务器在接收简历后没有关闭会话，而是持续保持着你的本地端口句柄。你可以先查看刚刚收到的邮件，或冒险深入对方的后台面板。
               </p>
+              {predictionText && /入侵|伪人|0x000000/.test(predictionText) && (
+                <div className="rounded-lg border border-violet-500/45 bg-violet-950/45 px-3 py-2 text-xs text-violet-200">
+                  🔮 记事本里的预言正在隐隐共鸣——此刻点击下方「深入对方后台服务器」，将触发因果律改写（#17）。
+                </div>
+              )}
               <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
                 <button
                   type="button"

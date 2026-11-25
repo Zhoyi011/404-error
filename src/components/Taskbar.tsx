@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Activity,
+  Battery,
+  BatteryCharging,
   Bluetooth,
   Code2,
   Cpu,
@@ -9,6 +11,7 @@ import {
   FileText,
   FolderLock,
   Globe,
+  HardDrive,
   Layers,
   Mail,
   MessageSquare,
@@ -17,11 +20,14 @@ import {
   Newspaper,
   Pin,
   PinOff,
+  Plug,
+  Radar,
   Radio,
   Search,
   Settings as SettingsIcon,
   Shield,
   ShoppingBag,
+  Sparkles,
   Terminal,
   Trophy,
   Volume2,
@@ -58,6 +64,8 @@ const ALL_TASKBAR_APPS: TaskbarAppMeta[] = [
   { id: 'monitor', label: '监视器', aliases: 'monitor 性能 资源 进程', icon: <Activity className="w-4 h-4 text-emerald-400" /> },
   { id: 'radio', label: '电波 FM', aliases: 'radio fm 广播 收音机', icon: <Radio className="w-4 h-4 text-amber-400" /> },
   { id: 'files', label: '文件箱', aliases: 'files vault 保险箱 文件', icon: <FolderLock className="w-4 h-4 text-indigo-400" /> },
+  { id: 'cleaner', label: '净化大师', aliases: 'cleaner disk storage 清理 磁盘 存储', icon: <Sparkles className="w-4 h-4 text-amber-400" /> },
+  { id: 'sniffer', label: '嗅探仪', aliases: 'sniffer packet trace 抓包 嗅探 c2', icon: <Radar className="w-4 h-4 text-cyan-400" /> },
 ];
 
 type TaskbarContextMenu =
@@ -73,6 +81,9 @@ export const Taskbar: React.FC = () => {
     clockTime,
     unlockedEndings,
     pinnedTaskbarApps,
+    batteryLevel,
+    isPluggedIn,
+    storageSnapshot,
     emailBadge,
     newsBadge,
     chatBadge,
@@ -86,6 +97,7 @@ export const Taskbar: React.FC = () => {
     cascadeAllWindows,
     toggleNetwork,
     toggleBluetooth,
+    togglePowerPlug,
     updateSystem,
     minimizeAllWindows,
     openApp,
@@ -273,6 +285,37 @@ export const Taskbar: React.FC = () => {
                   onChange={(e) => updateSystem({ soundVolume: Number(e.target.value) })}
                   className="w-full accent-sky-400 cursor-pointer"
                 />
+              </div>
+
+              <div className={`rounded-xl border px-3 py-2 flex items-center justify-between gap-2 text-xs ${isLight ? 'border-slate-200 bg-slate-50' : 'border-slate-700/80 bg-slate-800/70'}`}>
+                <div className="min-w-0">
+                  <div className="font-semibold flex items-center gap-1.5">
+                    {isPluggedIn ? (
+                      <BatteryCharging className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    ) : (
+                      <Battery className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    )}
+                    <span className="font-mono-tabular">
+                      {Math.round(batteryLevel)}% · {isPluggedIn ? '供电中' : '放电中'}
+                    </span>
+                  </div>
+                  <div className="text-[11px] opacity-75 font-mono-tabular flex items-center gap-1 mt-0.5">
+                    <HardDrive className="w-3 h-3 shrink-0" />
+                    <span>剩余 {storageSnapshot.freeGb.toFixed(1)} / {storageSnapshot.totalCapacityGb} GB</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={togglePowerPlug}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer ${
+                    isPluggedIn
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                      : 'bg-emerald-500 text-slate-950'
+                  }`}
+                >
+                  <Plug className="w-3 h-3" />
+                  <span>{isPluggedIn ? '拔掉' : '接电'}</span>
+                </button>
               </div>
             </div>
 
@@ -467,11 +510,11 @@ export const Taskbar: React.FC = () => {
             className={`hidden sm:flex items-center gap-2 px-2.5 h-8 rounded-md text-xs transition-colors cursor-pointer whitespace-nowrap ${
               isLight ? 'hover:bg-black/5' : 'hover:bg-white/10'
             }`}
-            title="打开 40 结局收集图鉴"
+            title="打开 50 结局收集图鉴"
           >
             <Trophy className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span className="font-mono-tabular font-medium">
-              图鉴 {unlockedEndings.length}/40
+              图鉴 {unlockedEndings.length}/50
             </span>
           </button>
         </div>
@@ -605,6 +648,22 @@ export const Taskbar: React.FC = () => {
             ) : (
               <VolumeX className="w-3.5 h-3.5 opacity-60" />
             )}
+            <span
+              className={`hidden sm:inline-flex items-center gap-1 text-[11px] font-mono-tabular ${
+                isPluggedIn
+                  ? 'text-emerald-400'
+                  : batteryLevel <= system.lowBatteryThreshold
+                    ? 'text-rose-400'
+                    : ''
+              }`}
+            >
+              {isPluggedIn ? (
+                <BatteryCharging className="w-3.5 h-3.5" />
+              ) : (
+                <Battery className="w-3.5 h-3.5" />
+              )}
+              <span>{Math.round(batteryLevel)}%</span>
+            </span>
           </button>
 
           <button

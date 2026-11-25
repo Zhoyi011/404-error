@@ -1,4 +1,4 @@
-export type StoreAppId = 'vscode' | 'monitor' | 'radio' | 'files';
+export type StoreAppId = 'vscode' | 'monitor' | 'radio' | 'files' | 'cleaner' | 'sniffer';
 
 export type AppId =
   | 'browser'
@@ -57,7 +57,17 @@ export type EndingId =
   | 37
   | 38
   | 39
-  | 40;
+  | 40
+  | 41
+  | 42
+  | 43
+  | 44
+  | 45
+  | 46
+  | 47
+  | 48
+  | 49
+  | 50;
 
 export type GamePhase =
   | 'TITLE'
@@ -114,6 +124,11 @@ export interface SystemSettings {
   powerMode: PowerMode;
   doNotDisturb: boolean;
   haptics: boolean;
+  usbDebugging: boolean;
+  overclockEnabled: boolean;
+  autoTimeSync: boolean;
+  uiCompact: boolean;
+  lowBatteryThreshold: number;
 }
 
 export interface BluetoothDevice {
@@ -308,8 +323,11 @@ export interface StoreAppCatalogItem {
   developer: string;
   category: '开发工具' | '系统安全' | '效率实用' | '影音电波';
   size: string;
+  sizeGb: number;
   rating: string;
   version: string;
+  updateVersion: string;
+  updateNote: string;
   tagline: string;
   description: string;
   releaseNote: string;

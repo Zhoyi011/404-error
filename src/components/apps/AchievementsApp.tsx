@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { Eye, Lock, Trophy } from 'lucide-react';
 import { useGame } from '../../context/GameContext';
-import { CATEGORY_LABELS, ENDING_IDS, ENDINGS } from '../../data/endings';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { CATEGORY_LABELS, ENDING_IDS } from '../../data/endings';
+import { getEndingDefinition } from '../../utils/mobileAdaptation';
 import { EndingCategory, EndingId } from '../../types/game';
 
 export const AchievementsApp: React.FC = () => {
+  const isMobile = useIsMobile();
   const { unlockedEndings, totalRuns, system, phase, triggerOmegaEnding } = useGame();
   const [filter, setFilter] = useState<'all' | EndingCategory>('all');
   const [selectedId, setSelectedId] = useState<EndingId>(1);
@@ -16,9 +19,9 @@ export const AchievementsApp: React.FC = () => {
   const mutedText = isLight ? 'text-slate-600' : 'text-slate-400';
 
   const visibleIds = ENDING_IDS.filter((id) =>
-    filter === 'all' ? true : ENDINGS[id].category === filter
+    filter === 'all' ? true : getEndingDefinition(id, isMobile).category === filter
   );
-  const selected = ENDINGS[selectedId];
+  const selected = getEndingDefinition(selectedId, isMobile);
   const selectedUnlocked = unlockedEndings.includes(selectedId);
 
   return (
@@ -29,7 +32,7 @@ export const AchievementsApp: React.FC = () => {
           <Trophy className="w-5 h-5 text-amber-400 shrink-0" />
           <div>
             <div className="text-sm font-bold font-mono-tabular">
-              已收集 {unlockedEndings.length} / 40 个结局
+              已收集 {unlockedEndings.length} / 50 个结局
             </div>
             <div className={`text-[11px] font-mono-tabular ${mutedText}`}>
               累计探索周目：{totalRuns} 次
@@ -72,7 +75,7 @@ export const AchievementsApp: React.FC = () => {
       {/* Endings Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         {visibleIds.map((id) => {
-          const def = ENDINGS[id];
+          const def = getEndingDefinition(id, isMobile);
           const unlocked = unlockedEndings.includes(id);
           const isSelected = selectedId === id;
           return (

@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { useGame } from '../context/GameContext';
+import { useIsMobile } from '../hooks/useIsMobile';
 import { ThemeMode } from '../types/game';
 import { soundEngine } from '../utils/audio';
 import { ClientDownloadButton, PWACachePanel, PWAInstallButton } from './PWAComponents';
@@ -21,16 +22,16 @@ import { AchievementsApp } from './apps/AchievementsApp';
 
 const SPLASH_QUOTES = [
   '别回头看窗户玻璃！',
-  '已收录 40 个不同结局',
+  '已收录 50 个不同结局',
   '试试在浏览器访问 wiki',
-  '应用商店上线：VS Code / 电波 / 监视器！',
+  '应用商店新增磁盘净化与深网嗅探仪！',
   '凌晨 00:00 或 06:00 会发生什么？',
   '100% 理智才能看穿一切',
   '千万别随便接入视频面试',
   'youtube.com/watch?v=dQw4w9WgXcQ ?',
 ];
 
-const LOADING_STEPS = [
+const DESKTOP_LOADING_STEPS = [
   { pct: 18, text: '正在初始化本地虚拟桌面环境...' },
   { pct: 42, text: '正在挂载邮件客户端与浏览器组件...' },
   { pct: 68, text: '正在同步本地网络与系统时钟...' },
@@ -38,7 +39,15 @@ const LOADING_STEPS = [
   { pct: 100, text: '系统准备就绪' },
 ];
 
-const PROLOGUE_SCENES = [
+const MOBILE_LOADING_STEPS = [
+  { pct: 18, text: '正在唤醒 iOS 27 移动系统环境...' },
+  { pct: 42, text: '正在挂载邮件与 Safary 浏览器组件...' },
+  { pct: 68, text: '正在同步本地 WLAN 与系统时钟...' },
+  { pct: 89, text: '检测到一处未正常关闭的后台进程...' },
+  { pct: 100, text: '手机系统准备就绪' },
+];
+
+const DESKTOP_PROLOGUE_SCENES = [
   {
     time: '23:48',
     location: '出租屋窗边',
@@ -61,7 +70,33 @@ const PROLOGUE_SCENES = [
   },
 ];
 
+const MOBILE_PROLOGUE_SCENES = [
+  {
+    time: '23:48',
+    location: '出租屋窗边',
+    line: '今年入冬后最浓的一场大雾正贴着玻璃蔓延。街灯的光晕被雾气撕扯成一团惨白，楼下连个行人影子都没有。',
+  },
+  {
+    time: '23:49',
+    location: '出租屋床边',
+    line: '房东下午刚发来最后通牒——明天中午前必须把拖欠的房租补齐。你翻遍了所有零钱和余额，依然差了一大截。',
+  },
+  {
+    time: '23:50',
+    location: '老旧备用手机',
+    line: '你按下侧边键点亮屏幕。发暗的冷光泛起，主屏幕的邮件图标角落，却静静亮着一封你从未订阅过的“内部观测备忘录”。',
+  },
+  {
+    time: '23:51',
+    location: '屏幕微光',
+    line: '“不管网上那些日结高薪的兼职写得有多诱人……千万别在没有任何防护的时候，让陌生网页看见你的脸。”',
+  },
+];
+
 export const PreGameFlow: React.FC = () => {
+  const isMobile = useIsMobile();
+  const loadingSteps = isMobile ? MOBILE_LOADING_STEPS : DESKTOP_LOADING_STEPS;
+  const prologueScenes = isMobile ? MOBILE_PROLOGUE_SCENES : DESKTOP_PROLOGUE_SCENES;
   const {
     phase,
     system,
@@ -81,7 +116,7 @@ export const PreGameFlow: React.FC = () => {
 
   // Loading state
   const [loadPct, setLoadPct] = useState(0);
-  const [loadMsg, setLoadMsg] = useState(LOADING_STEPS[0].text);
+  const [loadMsg, setLoadMsg] = useState(loadingSteps[0].text);
 
   // 5-second Warning countdown
   const [warnSeconds, setWarnSeconds] = useState(5);
@@ -93,10 +128,10 @@ export const PreGameFlow: React.FC = () => {
   useEffect(() => {
     if (phase !== 'LOADING') return;
     setLoadPct(8);
-    setLoadMsg(LOADING_STEPS[0].text);
+    setLoadMsg(loadingSteps[0].text);
 
     const timers: number[] = [];
-    LOADING_STEPS.forEach((step, idx) => {
+    loadingSteps.forEach((step, idx) => {
       const t = window.setTimeout(() => {
         setLoadPct(step.pct);
         setLoadMsg(step.text);
@@ -110,7 +145,7 @@ export const PreGameFlow: React.FC = () => {
     timers.push(doneTimer);
 
     return () => timers.forEach((t) => window.clearTimeout(t));
-  }, [phase, setBootPhase]);
+  }, [phase, setBootPhase, loadingSteps]);
 
   // 5-second warning timer -> PROLOGUE
   useEffect(() => {
@@ -150,7 +185,7 @@ export const PreGameFlow: React.FC = () => {
         e.preventDefault();
         soundEngine.playClick();
         setSceneIdx((prev) => {
-          if (prev + 1 >= PROLOGUE_SCENES.length) {
+          if (prev + 1 >= prologueScenes.length) {
             setBootPhase('PLAYING');
             return prev;
           }
@@ -160,11 +195,11 @@ export const PreGameFlow: React.FC = () => {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [phase, setBootPhase]);
+  }, [phase, setBootPhase, prologueScenes.length]);
 
   const advancePrologue = () => {
     soundEngine.playClick();
-    if (sceneIdx + 1 >= PROLOGUE_SCENES.length) {
+    if (sceneIdx + 1 >= prologueScenes.length) {
       setBootPhase('PLAYING');
     } else {
       setSceneIdx((prev) => prev + 1);
@@ -215,8 +250,8 @@ export const PreGameFlow: React.FC = () => {
 
         {/* Top Spacer */}
         <div className="relative z-10 px-6 pt-5 flex items-center justify-between text-xs text-slate-400">
-          <span>心理恐怖桌面解谜</span>
-          <span className="font-mono-tabular">已收录 40 个多线结局</span>
+          <span>{isMobile ? '心理恐怖移动解谜' : '心理恐怖桌面解谜'}</span>
+          <span className="font-mono-tabular">已收录 50 个多线结局</span>
         </div>
 
         {/* MC-Inspired Centered Title & Tactile Menu Stack */}
@@ -266,7 +301,7 @@ export const PreGameFlow: React.FC = () => {
                 className="py-3 px-4 rounded-lg bg-slate-800 hover:bg-slate-700 active:translate-y-0.5 text-slate-100 font-semibold text-sm border-t border-slate-600/60 border-b-4 border-slate-950 flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap"
               >
                 <Trophy className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>结局图鉴 ({unlockedEndings.length}/40)</span>
+                <span>结局图鉴 ({unlockedEndings.length}/50)</span>
               </button>
 
               <button
@@ -303,7 +338,7 @@ export const PreGameFlow: React.FC = () => {
 
         {/* Clean Footer */}
         <div className="relative z-10 px-6 pb-4 flex items-center justify-between text-xs text-slate-500">
-          <span>伪人入侵 · 虚拟桌面心理恐怖</span>
+          <span>{isMobile ? '伪人入侵 · 模拟手机心理恐怖' : '伪人入侵 · 虚拟桌面心理恐怖'}</span>
           <span className="font-mono-tabular">累计探索周目：{totalRuns} 次</span>
         </div>
 
@@ -412,7 +447,9 @@ export const PreGameFlow: React.FC = () => {
                           <div>
                             <div className="font-medium">光敏安全模式</div>
                             <div className="text-[11px] text-slate-400">
-                              关闭屏幕高频闪烁、突脸惊吓与光标强制接管效果
+                              {isMobile
+                                ? '关闭屏幕高频闪烁、突脸惊吓与幽灵触控效果'
+                                : '关闭屏幕高频闪烁、突脸惊吓与光标强制接管效果'}
                             </div>
                           </div>
                           <input
@@ -440,7 +477,7 @@ export const PreGameFlow: React.FC = () => {
                       </div>
 
                       <div className="p-4 rounded-xl border border-slate-800 bg-slate-950/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <span className="font-medium">桌面预设主题</span>
+                        <span className="font-medium">{isMobile ? '系统预设主题' : '桌面预设主题'}</span>
                         <div className="flex gap-2">
                           {(['dark', 'light', 'horror'] as ThemeMode[]).map((mode) => (
                             <button
@@ -464,7 +501,7 @@ export const PreGameFlow: React.FC = () => {
                       <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div>
                           <div className="font-semibold text-rose-300">重置本地存档</div>
-                          <div className="text-xs text-slate-400">清空已解锁的 40 个结局与统计记录</div>
+                          <div className="text-xs text-slate-400">清空已解锁的 50 个结局与统计记录</div>
                         </div>
                         {!confirmClear ? (
                           <button
@@ -502,21 +539,31 @@ export const PreGameFlow: React.FC = () => {
                   {titleModal === 'guide' && (
                     <div className="p-6 space-y-4 text-sm leading-relaxed text-slate-300">
                       <div className="p-4 rounded-xl border border-slate-800 bg-slate-950/60 space-y-1.5">
-                        <div className="font-bold text-slate-100">1. 虚拟桌面探索</div>
+                        <div className="font-bold text-slate-100">
+                          {isMobile ? '1. 模拟手机主屏幕探索' : '1. 虚拟桌面探索'}
+                        </div>
                         <p className="text-xs text-slate-400">
-                          在模拟桌面中自由操作浏览器、邮件箱、记事本、安全中心、系统设置、诊断终端与家人群聊。所有窗口支持拖动、八向缩放、停靠吸附与右键多开。
+                          {isMobile
+                            ? '在模拟 iPhone 主屏幕中自由操作 Safary、邮件、备忘录、安全中心、系统设置、终端与家人群聊。点击顶部灵动岛可呼出控制中心，底部小白条随时返回主屏幕。'
+                            : '在模拟桌面中自由操作浏览器、邮件箱、记事本、安全中心、系统设置、诊断终端与家人群聊。所有窗口支持拖动、八向缩放、停靠吸附与右键多开。'}
                         </p>
                       </div>
                       <div className="p-4 rounded-xl border border-slate-800 bg-slate-950/60 space-y-1.5">
                         <div className="font-bold text-slate-100">2. 线索检索与观察 Wiki</div>
                         <p className="text-xs text-slate-400">
-                          如果在探索中感到毫无头绪，可以在浏览器中访问「wiki」或点击常用书签，翻阅民间观察者留下的记录与异常应对传闻。
+                          {isMobile
+                            ? '如果在探索中感到毫无头绪，可以在 Safary 中访问「wiki」或点击常用书签，翻阅民间观察者留下的记录与异常应对传闻。'
+                            : '如果在探索中感到毫无头绪，可以在浏览器中访问「wiki」或点击常用书签，翻阅民间观察者留下的记录与异常应对传闻。'}
                         </p>
                       </div>
                       <div className="p-4 rounded-xl border border-slate-800 bg-slate-950/60 space-y-1.5">
-                        <div className="font-bold text-slate-100">3. 应用商店、蓝牙与 40 种结局</div>
+                        <div className="font-bold text-slate-100">
+                          {isMobile ? '3. App Store、电量存储与 50 种结局' : '3. 应用商店、电量存储与 50 种结局'}
+                        </div>
                         <p className="text-xs text-slate-400">
-                          不同的防护开关组合、网络通断、系统时钟、应用商店装机工具与理智状态都会导向截然不同的结局。解锁过的结局会永久保存在图鉴中。
+                          {isMobile
+                            ? '不同的防护开关组合、WLAN 通断、系统时钟、App Store 装机工具与理智状态都会导向截然不同的结局。解锁过的结局会永久保存在图鉴中。'
+                            : '不同的防护开关组合、网络通断、系统时钟、应用商店装机工具与理智状态都会导向截然不同的结局。解锁过的结局会永久保存在图鉴中。'}
                         </p>
                       </div>
                     </div>
@@ -551,7 +598,7 @@ export const PreGameFlow: React.FC = () => {
               />
             </div>
             <div className="flex justify-between text-[11px] font-mono-tabular text-slate-400">
-              <span>载入桌面资源</span>
+              <span>{isMobile ? '载入手机系统资源' : '载入桌面资源'}</span>
               <span>{loadPct}%</span>
             </div>
           </div>
@@ -638,8 +685,8 @@ export const PreGameFlow: React.FC = () => {
   }
 
   // phase === 'PROLOGUE'
-  const scene = PROLOGUE_SCENES[sceneIdx];
-  const isLastScene = sceneIdx + 1 >= PROLOGUE_SCENES.length;
+  const scene = prologueScenes[sceneIdx];
+  const isLastScene = sceneIdx + 1 >= prologueScenes.length;
 
   return (
     <div
@@ -650,14 +697,11 @@ export const PreGameFlow: React.FC = () => {
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(56,189,248,0.08),transparent_65%)]"
       />
-      {system.crtEffect && (
-        <div aria-hidden="true" className="pointer-events-none crt-scanlines absolute inset-0" />
-      )}
 
       {/* Top Controls */}
       <div className="relative z-10 flex items-center justify-between">
         <div className="text-xs font-mono-tabular text-slate-400">
-          序章 · {sceneIdx + 1} / {PROLOGUE_SCENES.length}
+          序章 · {sceneIdx + 1} / {prologueScenes.length}
         </div>
         <button
           type="button"
@@ -697,7 +741,7 @@ export const PreGameFlow: React.FC = () => {
 
       {/* Bottom Prompt */}
       <div className="relative z-10 flex items-center justify-between max-w-2xl mx-auto w-full text-xs text-slate-400">
-        <span>点击屏幕或按空格键继续</span>
+        <span>{isMobile ? '点击屏幕继续' : '点击屏幕或按空格键继续'}</span>
         <button
           type="button"
           onClick={(e) => {
@@ -706,7 +750,7 @@ export const PreGameFlow: React.FC = () => {
           }}
           className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold cursor-pointer"
         >
-          <span>{isLastScene ? '进入桌面' : '继续'}</span>
+          <span>{isLastScene ? (isMobile ? '进入主屏幕' : '进入桌面') : '继续'}</span>
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>

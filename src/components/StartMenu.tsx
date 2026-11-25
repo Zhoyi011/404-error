@@ -16,12 +16,14 @@ import {
   Pin,
   PinOff,
   Power,
+  Radar,
   Radio,
   RotateCcw,
   Search,
   Settings as SettingsIcon,
   Shield,
   ShoppingBag,
+  Sparkles,
   Terminal,
   Trophy,
   Waves,
@@ -50,11 +52,13 @@ const ALL_START_APPS: StartAppMeta[] = [
   { id: 'settings', name: '系统设置', desc: '蓝牙、亮度、时间与隐私设置', keywords: 'settings system 设置 网络 时钟 蓝牙 亮度', icon: <SettingsIcon className="w-5 h-5 text-slate-300" /> },
   { id: 'news', name: '城市新闻', desc: '晚间新闻动态', keywords: 'news 新闻 晚间', icon: <Newspaper className="w-5 h-5 text-rose-400" /> },
   { id: 'chat', name: '家人群聊', desc: '相亲相爱一家人', keywords: 'chat 群聊 家人', icon: <MessageSquare className="w-5 h-5 text-green-400" /> },
-  { id: 'achievements', name: '结局图鉴', desc: '查看 40 个结局档案', keywords: 'achievements endings 图鉴 结局 成就', icon: <Trophy className="w-5 h-5 text-yellow-400" /> },
+  { id: 'achievements', name: '结局图鉴', desc: '查看 50 个结局档案', keywords: 'achievements endings 图鉴 结局 成就', icon: <Trophy className="w-5 h-5 text-yellow-400" /> },
   { id: 'vscode', name: 'VS Code', desc: '源码重构与热更新编译器', keywords: 'vscode code ide 源码 编译', isStoreApp: true, icon: <Code2 className="w-5 h-5 text-sky-400" /> },
   { id: 'monitor', name: '资源监视器', desc: '实时性能与进程挂起', keywords: 'monitor 监视器 性能 进程 cpu', isStoreApp: true, icon: <Activity className="w-5 h-5 text-emerald-400" /> },
   { id: 'radio', name: '午夜电波', desc: 'FM 调频与应急广播', keywords: 'radio fm 电波 收音机 广播', isStoreApp: true, icon: <Radio className="w-5 h-5 text-amber-400" /> },
   { id: 'files', name: '深层文件箱', desc: '日志转储与碎片粉碎', keywords: 'files vault 文件 保险箱 粉碎', isStoreApp: true, icon: <FolderLock className="w-5 h-5 text-indigo-400" /> },
+  { id: 'cleaner', name: '磁盘净化大师', desc: '缓存清理与隐藏扇区粉碎', keywords: 'cleaner storage disk 清理 磁盘 存储 空间', isStoreApp: true, icon: <Sparkles className="w-5 h-5 text-amber-400" /> },
+  { id: 'sniffer', name: '深网嗅探仪', desc: '实时网卡抓包与 C2 信标溯源', keywords: 'sniffer packet trace 抓包 嗅探 网络 c2', isStoreApp: true, icon: <Radar className="w-5 h-5 text-cyan-400" /> },
 ];
 
 export const StartMenu: React.FC = () => {
@@ -133,7 +137,7 @@ export const StartMenu: React.FC = () => {
                   {q ? `搜索结果 (${filteredApps.length})` : `全部应用 (${ALL_START_APPS.length})`}
                 </span>
                 <span className={`text-[11px] font-mono-tabular ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                  结局图鉴 {unlockedEndings.length} / 40
+                  结局图鉴 {unlockedEndings.length} / 50
                 </span>
               </div>
               {filteredApps.length > 0 ? (

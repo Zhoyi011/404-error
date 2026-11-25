@@ -3,7 +3,7 @@ import { Brain, Compass, ShieldCheck } from 'lucide-react';
 import { useGame } from '../context/GameContext';
 
 export const DesktopHUD: React.FC = () => {
-  const { sanity, questText, privacy, system } = useGame();
+  const { sanity, questText, privacy, system, batteryLevel, isPluggedIn, storageSnapshot } = useGame();
 
   const isLight = system.theme === 'light';
   const cardSurface = isLight
@@ -45,12 +45,20 @@ export const DesktopHUD: React.FC = () => {
           </div>
         </div>
 
-        <div className={`pt-3 border-t flex items-center justify-between text-xs ${isLight ? 'border-slate-200' : 'border-white/10'}`}>
-          <span className="flex items-center gap-1.5 opacity-80">
-            <ShieldCheck className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-            <span>安全组件</span>
-          </span>
-          <span className="font-mono-tabular font-semibold">{activeShields} / 4</span>
+        <div className={`pt-3 border-t space-y-1.5 text-xs ${isLight ? 'border-slate-200' : 'border-white/10'}`}>
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 opacity-80">
+              <ShieldCheck className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <span>安全组件</span>
+            </span>
+            <span className="font-mono-tabular font-semibold">{activeShields} / 4</span>
+          </div>
+          <div className="flex items-center justify-between text-[11px] font-mono-tabular opacity-80">
+            <span>
+              电量 {Math.round(batteryLevel)}% ({isPluggedIn ? '充电' : '放电'})
+            </span>
+            <span>剩余 {storageSnapshot.freeGb.toFixed(1)} GB</span>
+          </div>
         </div>
 
         <div className={`pt-3 border-t ${isLight ? 'border-slate-200' : 'border-white/10'}`}>

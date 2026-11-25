@@ -1,13 +1,18 @@
 import React, { useMemo, useState } from 'react';
 import {
   Activity,
+  Award,
   CheckCircle2,
   Code2,
   Download,
   FolderLock,
+  HardDrive,
   PackageCheck,
+  Radar,
   Radio,
+  RefreshCw,
   Search,
+  ShieldCheck,
   Sparkles,
   Star,
   Trash2,
@@ -41,6 +46,16 @@ function getAppGlyph(id: StoreAppId, size: 'sm' | 'lg' = 'sm') {
         box: 'bg-indigo-500/15 border-indigo-500/35 text-indigo-400',
         icon: <FolderLock className={iconSize} />,
       };
+    case 'cleaner':
+      return {
+        box: 'bg-amber-500/15 border-amber-500/35 text-amber-400',
+        icon: <Sparkles className={iconSize} />,
+      };
+    case 'sniffer':
+      return {
+        box: 'bg-cyan-500/15 border-cyan-500/35 text-cyan-400',
+        icon: <Radar className={iconSize} />,
+      };
   }
 }
 
@@ -48,12 +63,20 @@ export const StoreApp: React.FC = () => {
   const isMobile = useIsMobile();
   const {
     system,
+    sanity,
     isOnline,
+    privacy,
+    batteryLevel,
+    anomalyStorageGb,
+    storageSnapshot,
     installedApps,
     downloadingApps,
     openedStoreApps,
+    updatedStoreApps,
     installStoreApp,
     uninstallStoreApp,
+    updateStoreApp,
+    triggerSystemArchitectEnding,
     openApp,
   } = useGame();
 
@@ -66,6 +89,8 @@ export const StoreApp: React.FC = () => {
     ? 'bg-white border-slate-200 text-slate-900'
     : 'bg-slate-800/65 border-slate-700/80 text-slate-100';
   const mutedText = isLight ? 'text-slate-600' : 'text-slate-400';
+
+  const totalCatalogCount = STORE_CATALOG.length;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -87,8 +112,25 @@ export const StoreApp: React.FC = () => {
   const displayName = (item: StoreAppCatalogItem) =>
     isMobile ? item.iosName : item.desktopName;
 
+  const allInstalled = installedApps.length === totalCatalogCount;
+  const allOpened = openedStoreApps.length === totalCatalogCount;
+  const allShields =
+    privacy.firewallEnabled &&
+    privacy.privacyEnabled &&
+    privacy.antivirusEnabled &&
+    privacy.dnsEnabled;
+  const architectReady =
+    allInstalled &&
+    allOpened &&
+    updatedStoreApps.length >= 1 &&
+    anomalyStorageGb <= 0.05 &&
+    batteryLevel >= 50 &&
+    allShields &&
+    sanity >= 80;
+
   const renderActionBtn = (item: StoreAppCatalogItem, compact = false) => {
     const isInstalled = installedApps.includes(item.id);
+    const isUpdated = updatedStoreApps.includes(item.id);
     const pct = downloadingApps[item.id];
     const isDownloading = pct !== undefined;
 
@@ -111,6 +153,20 @@ export const StoreApp: React.FC = () => {
     if (isInstalled) {
       return (
         <div className="flex items-center gap-1.5">
+          {!isUpdated && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                updateStoreApp(item.id);
+              }}
+              title={`安装热补丁 v${item.updateVersion}`}
+              className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-semibold flex items-center gap-1 cursor-pointer whitespace-nowrap"
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>{compact ? '补丁' : `更新 v${item.updateVersion}`}</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={(e) => {
@@ -142,6 +198,8 @@ export const StoreApp: React.FC = () => {
       );
     }
 
+    const lacksSpace = storageSnapshot.freeGb < item.sizeGb;
+
     return (
       <button
         type="button"
@@ -149,10 +207,15 @@ export const StoreApp: React.FC = () => {
           e.stopPropagation();
           installStoreApp(item.id);
         }}
-        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+        title={lacksSpace ? `磁盘空间不足（需要 ${item.sizeGb} GB）` : `下载 ${item.size}`}
+        className={`px-3 py-1.5 rounded-lg text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+          lacksSpace
+            ? 'bg-amber-600 hover:bg-amber-500'
+            : 'bg-emerald-600 hover:bg-emerald-500'
+        }`}
       >
         <Download className="w-3.5 h-3.5" />
-        <span>获取</span>
+        <span>{lacksSpace ? '空间不足' : '获取'}</span>
       </button>
     );
   };
@@ -167,16 +230,22 @@ export const StoreApp: React.FC = () => {
           isLight ? 'border-slate-200 bg-slate-50/90' : 'border-slate-800 bg-slate-900/80'
         }`}
       >
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-sky-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
             {isMobile ? 'A' : 'MS'}
           </div>
-          <div>
-            <div className="text-sm font-bold leading-tight">
+          <div className="min-w-0">
+            <div className="text-sm font-bold leading-tight truncate">
               {isMobile ? 'App Store' : 'Microsoft Store'}
             </div>
-            <div className={`text-[11px] font-mono-tabular ${mutedText}`}>
-              本地装机进度 {installedApps.length}/4 · 已体验 {openedStoreApps.length}/4
+            <div className={`text-[11px] font-mono-tabular flex flex-wrap items-center gap-x-2 gap-y-0.5 ${mutedText}`}>
+              <span>
+                装机 {installedApps.length}/{totalCatalogCount} · 已体验 {openedStoreApps.length}/{totalCatalogCount}
+              </span>
+              <span className="inline-flex items-center gap-1 text-sky-400">
+                <HardDrive className="w-3 h-3" />
+                剩余 {storageSnapshot.freeGb.toFixed(1)} / {storageSnapshot.totalCapacityGb} GB
+              </span>
             </div>
           </div>
         </div>
@@ -193,7 +262,7 @@ export const StoreApp: React.FC = () => {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索应用、开发者或工具..."
+            placeholder="搜索应用、清理、嗅探或工具..."
             className="bg-transparent outline-none w-full"
           />
         </div>
@@ -245,19 +314,69 @@ export const StoreApp: React.FC = () => {
           <div className="space-y-1">
             <div className="text-xs font-semibold text-sky-400 flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>精选推荐 · 深夜装机工具集</span>
+              <span>精选推荐 · 全栈装机工具集 ({totalCatalogCount} 款)</span>
             </div>
             <p className={`text-xs leading-relaxed ${mutedText}`}>
-              所有应用均免费提供本地离线沙箱安装。下载后的应用会直接出现在桌面图标与快捷入口中。
+              {isMobile
+                ? '安装至少 4 款并逐一启动可解锁「极客之夜」；集齐全部 6 款并完成净化升级可冲刺 #50 架构师认证。'
+                : '安装至少 4 款并逐一启动可解锁「极客之夜」；集齐全部 6 款并完成净化升级可冲刺 #50 架构师认证。'}
             </p>
           </div>
-          <div className="flex items-center gap-2 text-xs font-mono-tabular shrink-0">
+          <div className="flex items-center gap-2 text-xs font-mono-tabular shrink-0 whitespace-nowrap">
             <PackageCheck className="w-4 h-4 text-emerald-400" />
             <span>
-              {installedApps.length === 4
-                ? '全套应用已安装就绪'
-                : `已安装 ${installedApps.length} / 4 款`}
+              {allInstalled
+                ? '全套 6 款已安装就绪'
+                : `已安装 ${installedApps.length} / ${totalCatalogCount} 款`}
             </span>
+          </div>
+        </div>
+
+        {/* #50 System Architect Certification Banner */}
+        <div
+          className={`rounded-2xl border p-4 space-y-3 ${
+            architectReady
+              ? 'border-emerald-500/50 bg-emerald-500/10'
+              : surfaceCard
+          }`}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="space-y-0.5">
+              <div className="text-xs font-bold flex items-center gap-1.5 text-amber-400">
+                <Award className="w-4 h-4 shrink-0" />
+                <span>终极系统架构师认证 (#50)</span>
+              </div>
+              <p className={`text-[11px] leading-relaxed ${mutedText}`}>
+                达成全装机、热补丁、存储净空、电池续航、四重安全防护与清醒思维，即可签发终极防线认证。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={triggerSystemArchitectEnding}
+              className={`px-3.5 py-2 rounded-lg text-xs font-bold whitespace-nowrap shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                architectReady
+                  ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                  : 'bg-sky-600/25 hover:bg-sky-600/40 text-sky-300 border border-sky-500/40'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>签发终极架构师认证</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono-tabular">
+            <div className={`px-2.5 py-1.5 rounded-lg border ${allInstalled && allOpened ? 'border-emerald-500/40 text-emerald-400 bg-emerald-500/10' : 'border-slate-700/60 opacity-75'}`}>
+              6/6 安装且启动 ({openedStoreApps.length}/6)
+            </div>
+            <div className={`px-2.5 py-1.5 rounded-lg border ${updatedStoreApps.length >= 1 ? 'border-emerald-500/40 text-emerald-400 bg-emerald-500/10' : 'border-slate-700/60 opacity-75'}`}>
+              热补丁升级 ({updatedStoreApps.length}/1)
+            </div>
+            <div className={`px-2.5 py-1.5 rounded-lg border ${anomalyStorageGb <= 0.05 && batteryLevel >= 50 ? 'border-emerald-500/40 text-emerald-400 bg-emerald-500/10' : 'border-slate-700/60 opacity-75'}`}>
+              异常 0G · 电量≥50%
+            </div>
+            <div className={`px-2.5 py-1.5 rounded-lg border ${allShields && sanity >= 80 ? 'border-emerald-500/40 text-emerald-400 bg-emerald-500/10' : 'border-slate-700/60 opacity-75'}`}>
+              4/4 防护 · 理智≥80%
+            </div>
           </div>
         </div>
 
@@ -269,6 +388,7 @@ export const StoreApp: React.FC = () => {
               const isSelected = selectedItem.id === item.id;
               const isInstalled = installedApps.includes(item.id);
               const isOpened = openedStoreApps.includes(item.id);
+              const isUpdated = updatedStoreApps.includes(item.id);
 
               return (
                 <div
@@ -291,6 +411,11 @@ export const StoreApp: React.FC = () => {
                         </span>
                         {isInstalled && (
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        )}
+                        {isUpdated && (
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 text-[10px] font-mono-tabular whitespace-nowrap shrink-0">
+                            v{item.updateVersion}
+                          </span>
                         )}
                       </div>
                       <div className={`text-[11px] truncate ${mutedText}`}>
@@ -333,12 +458,18 @@ export const StoreApp: React.FC = () => {
                 <div className="flex items-center gap-2 text-xs font-mono-tabular text-amber-400">
                   <Star className="w-3.5 h-3.5 fill-current" />
                   <span>{selectedItem.rating}</span>
-                  <span className={mutedText}>· v{selectedItem.version} · {selectedItem.size}</span>
+                  <span className={mutedText}>
+                    · v
+                    {updatedStoreApps.includes(selectedItem.id)
+                      ? selectedItem.updateVersion
+                      : selectedItem.version}{' '}
+                    · {selectedItem.size}
+                  </span>
                 </div>
               </div>
             </div>
 
-            <div className="pt-1 flex items-center justify-between gap-2">
+            <div className="pt-1 flex flex-wrap items-center justify-between gap-2">
               {renderActionBtn(selectedItem, false)}
               <span className={`text-[11px] ${mutedText}`}>
                 {installedApps.includes(selectedItem.id)
@@ -357,9 +488,15 @@ export const StoreApp: React.FC = () => {
             </div>
 
             <div className="border-t border-slate-700/40 pt-3 space-y-1.5">
-              <div className="text-xs font-semibold">版本更新日志</div>
+              <div className="text-xs font-semibold">
+                {updatedStoreApps.includes(selectedItem.id)
+                  ? `安全热补丁 v${selectedItem.updateVersion}（已应用）`
+                  : `基础版日志 · 可升级补丁 v${selectedItem.updateVersion}`}
+              </div>
               <p className={`text-xs leading-relaxed font-mono-tabular ${mutedText}`}>
-                {selectedItem.releaseNote}
+                {updatedStoreApps.includes(selectedItem.id)
+                  ? selectedItem.updateNote
+                  : `${selectedItem.releaseNote}（补丁说明：${selectedItem.updateNote}）`}
               </p>
             </div>
           </div>

@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import {
   Activity,
   Battery,
+  BatteryCharging,
   BellOff,
   Bluetooth,
   ChevronLeft,
@@ -19,12 +20,14 @@ import {
   Newspaper,
   Plus,
   Power,
+  Radar,
   Radio,
   RotateCcw,
   Settings as SettingsIcon,
   Shield,
   ShoppingBag,
   SlidersHorizontal,
+  Sparkles,
   Terminal,
   Trophy,
   Volume2,
@@ -41,6 +44,7 @@ import { Overlays } from './Overlays';
 import { AchievementsApp } from './apps/AchievementsApp';
 import { BrowserApp } from './apps/BrowserApp';
 import { ChatApp } from './apps/ChatApp';
+import { CleanerApp } from './apps/CleanerApp';
 import { EmailApp } from './apps/EmailApp';
 import { FilesApp } from './apps/FilesApp';
 import { MonitorApp } from './apps/MonitorApp';
@@ -50,6 +54,7 @@ import { NotepadApp } from './apps/NotepadApp';
 import { RadioApp } from './apps/RadioApp';
 import { SecurityApp } from './apps/SecurityApp';
 import { SettingsApp } from './apps/SettingsApp';
+import { SnifferApp } from './apps/SnifferApp';
 import { StoreApp } from './apps/StoreApp';
 import { TaskManagerApp } from './apps/TaskManagerApp';
 import { TerminalApp } from './apps/TerminalApp';
@@ -157,6 +162,18 @@ const IOS_STORE_APPS: Record<
     bgClass: 'bg-gradient-to-br from-indigo-500 to-purple-700 text-white',
     icon: <FolderLock className="w-7 h-7" />,
   },
+  cleaner: {
+    id: 'cleaner',
+    label: '手机清理专家',
+    bgClass: 'bg-gradient-to-br from-amber-500 to-orange-600 text-white',
+    icon: <Sparkles className="w-7 h-7" />,
+  },
+  sniffer: {
+    id: 'sniffer',
+    label: '网络抓包仪',
+    bgClass: 'bg-gradient-to-br from-cyan-500 to-teal-700 text-white',
+    icon: <Radar className="w-7 h-7" />,
+  },
 };
 
 const IOS_DOCK_APPS: {
@@ -203,11 +220,13 @@ const IOS_APP_TITLES: Record<AppId, string> = {
   terminal: '终端',
   store: 'App Store',
   morse: '电码破译器',
-  taskmgr: '任务监视器',
+  taskmgr: '进程监视',
   vscode: 'VS Code Mobile',
   monitor: '性能监视器',
   radio: '深夜广播',
   files: '文件保险箱',
+  cleaner: '手机清理专家',
+  sniffer: '网络抓包仪',
 };
 
 function getMobileBootIcon(appId: AppId) {
@@ -255,11 +274,16 @@ function renderMobileAppBody(instance: WindowInstance) {
       return <RadioApp />;
     case 'files':
       return <FilesApp />;
+    case 'cleaner':
+      return <CleanerApp isMobile />;
+    case 'sniffer':
+      return <SnifferApp isMobile />;
   }
 }
 
 export const MobilePhoneShell: React.FC = () => {
   const {
+    phase,
     system,
     step,
     sanity,
@@ -273,6 +297,9 @@ export const MobilePhoneShell: React.FC = () => {
     newsBadge,
     chatBadge,
     unlockedEndings,
+    batteryLevel,
+    isPluggedIn,
+    storageSnapshot,
     windowInstances,
     focusedInstanceId,
     openApp,
@@ -281,6 +308,7 @@ export const MobilePhoneShell: React.FC = () => {
     minimizeAllWindows,
     toggleNetwork,
     toggleBluetooth,
+    togglePowerPlug,
     updateSystem,
     shutdownSystem,
     resetRun,
@@ -328,13 +356,14 @@ export const MobilePhoneShell: React.FC = () => {
   };
 
   const brightnessDimOpacity = Math.max(0, Math.min(0.6, (100 - system.brightness) / 115));
+  const activeVisualChaos = phase === 'PLAYING' || phase === 'INVASION';
 
   return (
     <div
       onContextMenu={(e) => e.preventDefault()}
       className={`relative w-screen h-[100dvh] overflow-hidden flex flex-col select-none ${wallpaperBg} ${
-        step >= 2 && !system.photosensitiveSafe ? 'animate-glitch' : ''
-      } ${desktopShake && !system.photosensitiveSafe ? 'animate-shake' : ''}`}
+        activeVisualChaos && step >= 2 && !system.photosensitiveSafe ? 'animate-glitch' : ''
+      } ${activeVisualChaos && desktopShake && !system.photosensitiveSafe ? 'animate-shake' : ''}`}
     >
       {/* Atmospheric Overlays */}
       {brightnessDimOpacity > 0 && (
@@ -350,8 +379,10 @@ export const MobilePhoneShell: React.FC = () => {
           className="pointer-events-none fixed inset-0 z-[109] bg-amber-500/15 mix-blend-multiply"
         />
       )}
-      <div aria-hidden="true" className="horror-vignette pointer-events-none fixed inset-0 z-[110]" />
-      {system.crtEffect && (
+      {activeVisualChaos && (
+        <div aria-hidden="true" className="horror-vignette pointer-events-none fixed inset-0 z-[110]" />
+      )}
+      {activeVisualChaos && system.crtEffect && (
         <div aria-hidden="true" className="crt-scanlines pointer-events-none fixed inset-0 z-[111]" />
       )}
 
@@ -386,10 +417,21 @@ export const MobilePhoneShell: React.FC = () => {
           type="button"
           onClick={() => setControlCenterOpen(true)}
           aria-label="打开控制中心"
-          className="w-16 flex items-center justify-end gap-1.5 text-xs cursor-pointer min-h-[36px]"
+          className="min-w-16 flex items-center justify-end gap-1 text-xs cursor-pointer min-h-[36px] whitespace-nowrap"
         >
-          {isOnline ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5 text-rose-400" />}
-          <Battery className="w-4 h-4" />
+          {isOnline ? <Wifi className="w-3.5 h-3.5 shrink-0" /> : <WifiOff className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
+          <span
+            className={`inline-flex items-center gap-0.5 text-[10px] font-mono-tabular font-semibold ${
+              isPluggedIn
+                ? 'text-emerald-400'
+                : batteryLevel <= system.lowBatteryThreshold
+                  ? 'text-rose-400'
+                  : ''
+            }`}
+          >
+            {isPluggedIn ? <BatteryCharging className="w-3.5 h-3.5 shrink-0" /> : <Battery className="w-3.5 h-3.5 shrink-0" />}
+            <span>{Math.round(batteryLevel)}%</span>
+          </span>
         </button>
       </header>
 
@@ -408,7 +450,7 @@ export const MobilePhoneShell: React.FC = () => {
               className="flex items-center gap-0.5 text-sky-500 text-sm font-medium min-h-[40px] pr-2 cursor-pointer"
             >
               <ChevronLeft className="w-4 h-4" />
-              <span>桌面</span>
+              <span>主屏幕</span>
             </button>
 
             <h1 className="text-sm font-semibold truncate">
@@ -519,7 +561,7 @@ export const MobilePhoneShell: React.FC = () => {
                   {isOnline ? 'WLAN 已连接' : '已启用断网隔离'}
                 </div>
                 <div className="text-[11px] font-mono-tabular opacity-75">
-                  图鉴 {unlockedEndings.length}/40
+                  图鉴 {unlockedEndings.length}/50 · 剩余 {storageSnapshot.freeGb.toFixed(0)}G
                 </div>
               </button>
             </div>
@@ -762,6 +804,28 @@ export const MobilePhoneShell: React.FC = () => {
                   onChange={(e) => updateSystem({ soundVolume: Number(e.target.value) })}
                   className="w-full accent-sky-400 cursor-pointer"
                 />
+              </div>
+
+              <div className="rounded-3xl bg-white/10 border border-white/15 p-4 flex items-center justify-between gap-2 text-xs">
+                <div>
+                  <div className="font-semibold">
+                    电量 {Math.round(batteryLevel)}% · {isPluggedIn ? 'USB-C 充电中' : '电池续航中'}
+                  </div>
+                  <div className="text-[11px] text-slate-300 font-mono-tabular">
+                    存储已用 {storageSnapshot.usedGb.toFixed(1)} / {storageSnapshot.totalCapacityGb} GB
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={togglePowerPlug}
+                  className={`px-3 py-1.5 rounded-xl font-semibold whitespace-nowrap shrink-0 cursor-pointer ${
+                    isPluggedIn
+                      ? 'bg-emerald-500 text-slate-950'
+                      : 'bg-amber-500 text-slate-950'
+                  }`}
+                >
+                  {isPluggedIn ? '拔掉电源' : '插上充电'}
+                </button>
               </div>
 
               <div className="rounded-3xl bg-white/10 border border-white/15 p-4 space-y-2.5">

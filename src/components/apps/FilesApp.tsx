@@ -129,7 +129,7 @@ export const FilesApp: React.FC = () => {
                       {file.name}
                     </div>
                     <div className={`text-[11px] ${mutedText}`}>
-                      {file.folder} · {file.size}
+                      {isMobile && file.folder === '桌面' ? '主目录' : file.folder} · {file.size}
                     </div>
                   </div>
                 </div>
@@ -145,7 +145,7 @@ export const FilesApp: React.FC = () => {
             <div>
               <div className="text-sm font-mono-tabular font-bold">{activeFile.name}</div>
               <div className={`text-[11px] ${mutedText}`}>
-                位置：/{activeFile.folder}/{activeFile.name} · 大小：{activeFile.size}
+                位置：/{isMobile && activeFile.folder === '桌面' ? '主目录' : activeFile.folder}/{activeFile.name} · 大小：{activeFile.size}
               </div>
             </div>
             {activeFile.shreddable && (

@@ -52,12 +52,15 @@ jobs:
 
           PREV_TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
           if [ -n "${PREV_TAG}" ]; then
-            COMMIT_NOTES="$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s" -n 10 || true)"
+            COMMIT_NOTES="$(git log "${PREV_TAG}..HEAD" --no-merges --pretty=format:"- %s%n%w(0,2,2)%b" -n 15 || true)"
           else
+            COMMIT_NOTES="$(git log --no-merges -n 8 --pretty=format:"- %s%n%w(0,2,2)%b" || true)"
+          fi
+          if [ -z "${COMMIT_NOTES}" ]; then
             COMMIT_NOTES="$(git log -n 5 --pretty=format:"- %s" || true)"
           fi
           if [ -z "${COMMIT_NOTES}" ]; then
-            COMMIT_NOTES="- 发布 v${RELEASE_VERSION} 客户端构建"
+            COMMIT_NOTES="- 发布 v${RELEASE_VERSION} 客户端构建与体验优化"
           fi
 
           printf '%s\n' "${COMMIT_NOTES}" > /tmp/release-notes.txt
@@ -322,11 +325,16 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Generate version.json
+      - name: Install release-notes dependencies
+        run: npm install --omit=dev --no-audit --no-fund --legacy-peer-deps || npm install --no-audit --no-fund --legacy-peer-deps || true
+
+      - name: Generate version.json & Polish Chinese release notes
         env:
           RELEASE_VERSION: ${{ needs.resolve-version.outputs.version }}
+          RELEASE_NOTES_FILE: release-assets/release-notes.txt
+          OUT_RELEASE_NOTES_MD: /tmp/polished-release-notes.md
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          export RELEASE_NOTES="$(cat release-assets/release-notes.txt 2>/dev/null || echo "- 发布新版本")"
           node scripts/generate-version-json.mjs release-assets/version.json
           cat release-assets/version.json
           ls -lh release-assets/
@@ -335,7 +343,13 @@ jobs:
         env:
           RELEASE_TAG: ${{ needs.resolve-version.outputs.tag }}
         run: |
-          NOTES_CONTENT="$(cat release-assets/release-notes.txt 2>/dev/null || echo "- 发布新版本")"
+          if [ -s /tmp/polished-release-notes.md ]; then
+            NOTES_CONTENT="$(cat /tmp/polished-release-notes.md)"
+          elif [ -s release-assets/release-notes.txt ]; then
+            NOTES_CONTENT="$(cat release-assets/release-notes.txt)"
+          else
+            NOTES_CONTENT="- 优化跨平台客户端运行性能与离线游玩体验"
+          fi
           {
             echo "## 伪人入侵 ${RELEASE_TAG}"
             echo ""
@@ -346,6 +360,7 @@ jobs:
             echo '- **Linux (x86_64)**：`404-error-linux.AppImage`（通用便携运行版） / `404-error-linux.deb`（Debian / Ubuntu 安装包）'
             echo '- **Android (.apk)**：`404-error-android.apk`'
           } > /tmp/release-body.md
+          cat /tmp/release-body.md
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2

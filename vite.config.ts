@@ -25,7 +25,7 @@ export default defineConfig(() => {
           name: '伪人入侵 - 心理恐怖桌面解谜',
           short_name: '伪人入侵',
           description:
-            '心理恐怖风格虚拟桌面解谜游戏。在仿 Windows 11 与 iOS 移动端的虚拟系统中调查异常事件，收集全部 40 个结局。',
+            '心理恐怖风格虚拟桌面解谜游戏。在仿 Windows 11 与 iOS 移动端的虚拟系统中调查异常事件，收集全部 50 个结局。',
           theme_color: '#070b14',
           background_color: '#05070d',
           display: 'standalone',

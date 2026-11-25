@@ -36,7 +36,14 @@ import {
   WindowRect,
 } from '../types/game';
 import { soundEngine } from '../utils/audio';
-import { computeSystemMetrics, SystemMetricsSnapshot } from '../utils/systemMetrics';
+import {
+  BatteryTelemetry,
+  computeBatteryTelemetry,
+  computeStorageSnapshot,
+  computeSystemMetrics,
+  StorageSnapshot,
+  SystemMetricsSnapshot,
+} from '../utils/systemMetrics';
 
 const STORAGE_KEYS = {
   ENDINGS: 'pseudo_v3_unlocked_endings',
@@ -70,6 +77,11 @@ const DEFAULT_SYSTEM: SystemSettings = {
   powerMode: 'balanced',
   doNotDisturb: false,
   haptics: true,
+  usbDebugging: false,
+  overclockEnabled: false,
+  autoTimeSync: true,
+  uiCompact: false,
+  lowBatteryThreshold: 20,
 };
 
 function isEndedOrStory(p: GamePhase): boolean {
@@ -90,7 +102,7 @@ const APP_TITLES: Record<AppId, string> = {
   security: 'Windows 安全中心',
   news: '城市晚间新闻',
   chat: '相亲相爱一家人',
-  achievements: '结局图鉴 (40)',
+  achievements: '结局图鉴 (50)',
   terminal: '系统诊断终端',
   store: 'Microsoft Store',
   morse: '摩斯密码破译器',
@@ -99,9 +111,11 @@ const APP_TITLES: Record<AppId, string> = {
   monitor: '资源监视器',
   radio: '午夜电波 FM',
   files: '深层文件箱',
+  cleaner: '磁盘净化大师',
+  sniffer: '深网嗅探仪',
 };
 
-const STORE_APP_IDS: StoreAppId[] = ['vscode', 'monitor', 'radio', 'files'];
+const STORE_APP_IDS: StoreAppId[] = ['vscode', 'monitor', 'radio', 'files', 'cleaner', 'sniffer'];
 
 function isStoreAppId(id: AppId): id is StoreAppId {
   return (STORE_APP_IDS as string[]).includes(id);
@@ -133,7 +147,8 @@ function createCascadeRect(offsetIndex: number, appId?: AppId): WindowRect {
     appId === 'settings' ||
     appId === 'store' ||
     appId === 'vscode' ||
-    appId === 'taskmgr';
+    appId === 'taskmgr' ||
+    appId === 'sniffer';
   const baseW = isWide ? 840 : 660;
   const baseH = isWide ? 600 : 480;
   const width = Math.min(baseW, Math.max(360, vw - 160));
@@ -300,10 +315,20 @@ interface GameContextValue {
   bluetoothScanning: boolean;
   decodedMorseIds: string[];
   systemMetrics: SystemMetricsSnapshot;
+  batteryLevel: number;
+  isPluggedIn: boolean;
+  batteryTelemetry: BatteryTelemetry;
+  tempCacheGb: number;
+  anomalyStorageGb: number;
+  storageSnapshot: StorageSnapshot;
+  clockWarpCount: number;
 
   installedApps: StoreAppId[];
   downloadingApps: Partial<Record<StoreAppId, number>>;
   openedStoreApps: StoreAppId[];
+  updatedStoreApps: StoreAppId[];
+  capturedPackets: string[];
+  terminalCommandsUsed: string[];
   suspendedDaemon: boolean;
   vscodePatches: [boolean, boolean, boolean];
   vscodeGodMode: boolean;
@@ -394,6 +419,7 @@ interface GameContextValue {
 
   installStoreApp: (id: StoreAppId) => void;
   uninstallStoreApp: (id: StoreAppId) => void;
+  updateStoreApp: (id: StoreAppId) => void;
   toggleVscodePatch: (idx: 0 | 1 | 2) => void;
   setVscodeGodMode: (val: boolean) => void;
   toggleVscodeCorruptExt: () => void;
@@ -412,6 +438,21 @@ interface GameContextValue {
   sendMorseCounterPulse: () => void;
   transmitMorseCode: (text: string) => void;
   auditAndTerminateDaemon: () => void;
+
+  togglePowerPlug: () => void;
+  drainBatteryManual: (amount?: number) => void;
+  triggerLowPowerStealthEnding: () => void;
+  triggerOverclockMeltdown: (forcedByCli?: boolean) => void;
+  cleanTempCache: () => void;
+  purgeAnomalyStorage: () => void;
+  triggerStorageZeroEnding: () => void;
+  floodStorageDump: (amountGb?: number) => void;
+  triggerUsbHijack: () => void;
+  captureSnifferPacket: (beaconId: string) => void;
+  traceAndSeverC2: () => void;
+  recordTerminalCommand: (cmd: string) => void;
+  runTerminalDaemonAudit: () => void;
+  triggerSystemArchitectEnding: () => void;
 
   markEmailRead: (emailId: string) => void;
   joinVideoInterview: () => void;
@@ -545,6 +586,17 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [installedApps, setInstalledApps] = useState<StoreAppId[]>([]);
   const [downloadingApps, setDownloadingApps] = useState<Partial<Record<StoreAppId, number>>>({});
   const [openedStoreApps, setOpenedStoreApps] = useState<StoreAppId[]>([]);
+  const [updatedStoreApps, setUpdatedStoreApps] = useState<StoreAppId[]>([]);
+  const [capturedPackets, setCapturedPackets] = useState<string[]>([]);
+  const [terminalCommandsUsed, setTerminalCommandsUsed] = useState<string[]>([]);
+  const [batteryLevel, setBatteryLevel] = useState<number>(78);
+  const [isPluggedIn, setIsPluggedIn] = useState<boolean>(true);
+  const [tempCacheGb, setTempCacheGb] = useState<number>(4.6);
+  const [anomalyStorageGb, setAnomalyStorageGb] = useState<number>(1.8);
+  const [clockWarpCount, setClockWarpCount] = useState<number>(0);
+  const [viewportIsMobile, setViewportIsMobile] = useState<boolean>(
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  );
   const [suspendedDaemon, setSuspendedDaemon] = useState(false);
   const [vscodePatches, setVscodePatches] = useState<[boolean, boolean, boolean]>([false, false, false]);
   const [vscodeGodMode, setVscodeGodMode] = useState(false);
@@ -569,9 +621,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const chatTimerRef = useRef<number | null>(null);
   const jumpscareTimerRef = useRef<number | null>(null);
   const crashTimerRef = useRef<number | null>(null);
+  const prophecyTimerRef = useRef<number | null>(null);
   const storeTimersRef = useRef<number[]>([]);
   const morningWarnedRef = useRef(false);
   const ramWarnedRef = useRef(false);
+  const lowBatteryWarnedRef = useRef(false);
+  const diskWarnedRef = useRef(false);
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
   const sanityRef = useRef(sanity);
@@ -582,8 +637,16 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   isOnlineRef.current = isOnline;
   const privacyRef = useRef(privacy);
   privacyRef.current = privacy;
+  const systemRef = useRef(system);
+  systemRef.current = system;
+  const isPluggedInRef = useRef(isPluggedIn);
+  isPluggedInRef.current = isPluggedIn;
+  const batteryLevelRef = useRef(batteryLevel);
+  batteryLevelRef.current = batteryLevel;
   const suspendedDaemonRef = useRef(suspendedDaemon);
   suspendedDaemonRef.current = suspendedDaemon;
+  const predictionTextRef = useRef(predictionText);
+  predictionTextRef.current = predictionText;
 
   useEffect(() => {
     soundEngine.setConfig(system.sound, system.soundVolume);
@@ -605,14 +668,21 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [system.theme, system.accentColor]);
 
   useEffect(() => {
-    const base = Math.max(0, (100 - sanity) / 100);
-    const intensity = step >= 2 ? Math.max(base, 0.55) : base;
+    const isInteractiveGameplay = phase === 'PLAYING' || phase === 'INVASION';
+    const base = isInteractiveGameplay ? Math.max(0, (100 - sanity) / 100) : 0;
+    const intensity = isInteractiveGameplay && step >= 2 ? Math.max(base, 0.55) : base;
     document.documentElement.style.setProperty('--horror-intensity', intensity.toFixed(2));
-  }, [sanity, step]);
+  }, [phase, sanity, step]);
 
   useEffect(() => {
     const id = window.setInterval(() => setNowTick(new Date()), 1000);
     return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => setViewportIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const clockTime = useMemo(
@@ -660,6 +730,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     phaseRef.current = 'ENDING_STORY';
     setPhase('ENDING_STORY');
     setCurrentEndingId(id);
+    setDesktopShake(false);
+    document.documentElement.style.setProperty('--horror-intensity', '0');
     setInvasionLocked(false);
     setCameraModalOpen(false);
     setActiveAnomaly(null);
@@ -674,6 +746,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (crashTimerRef.current) {
       window.clearTimeout(crashTimerRef.current);
       crashTimerRef.current = null;
+    }
+    if (prophecyTimerRef.current) {
+      window.clearTimeout(prophecyTimerRef.current);
+      prophecyTimerRef.current = null;
     }
 
     soundEngine.playNotification();
@@ -690,6 +766,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (isEndedOrStory(phaseRef.current) || phaseRef.current === 'JUMPSCARE') return;
     phaseRef.current = 'CRASH_SEQUENCE';
     setPhase('CRASH_SEQUENCE');
+    setDesktopShake(false);
+    document.documentElement.style.setProperty('--horror-intensity', '0');
     setInvasionLocked(false);
     setCameraModalOpen(false);
     setActiveAnomaly(null);
@@ -846,6 +924,43 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [windowInstances, installedApps, step, suspendedDaemon]
   );
 
+  const batteryTelemetry = useMemo(
+    () =>
+      computeBatteryTelemetry({
+        batteryLevel,
+        isPluggedIn,
+        powerMode: system.powerMode,
+        brightness: system.brightness,
+        bluetooth: system.bluetooth,
+        isOnline,
+        overclockEnabled: system.overclockEnabled,
+        openWindowCount: windowInstances.filter((w) => !w.isMinimized).length,
+        step,
+      }),
+    [
+      batteryLevel,
+      isPluggedIn,
+      system.powerMode,
+      system.brightness,
+      system.bluetooth,
+      isOnline,
+      system.overclockEnabled,
+      windowInstances,
+      step,
+    ]
+  );
+
+  const storageSnapshot = useMemo(
+    () =>
+      computeStorageSnapshot({
+        isMobile: viewportIsMobile,
+        installedApps,
+        tempCacheGb,
+        anomalyStorageGb,
+      }),
+    [viewportIsMobile, installedApps, tempCacheGb, anomalyStorageGb]
+  );
+
   // Monitor 4.00 GB old-PC memory pressure from open apps / tabs -> 5s crash screen -> Ending #27
   useEffect(() => {
     if (phase !== 'PLAYING' && phase !== 'INVASION') {
@@ -853,7 +968,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
     if (systemMetrics.memPercent >= 100) {
-      notify('4.00 GB 物理内存彻底爆表，系统内核正在崩溃……', 'error');
+      notify('4.00 GB 运行内存彻底爆表，系统内核正在崩溃……', 'error');
       const t = window.setTimeout(() => {
         if (phaseRef.current === 'PLAYING' || phaseRef.current === 'INVASION') {
           triggerMemoryCrash();
@@ -929,6 +1044,92 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, 24000);
     return () => window.clearInterval(timer);
   }, [system.doNotDisturb]);
+
+  // Dynamic Battery drain / charge loop & #41 (电量归零)
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (phaseRef.current !== 'PLAYING' && phaseRef.current !== 'INVASION') return;
+      if (isPluggedInRef.current) {
+        lowBatteryWarnedRef.current = false;
+        setBatteryLevel((prev) => Math.min(100, Number((prev + 1.5).toFixed(1))));
+        return;
+      }
+
+      const sys = systemRef.current;
+      const telemetry = computeBatteryTelemetry({
+        batteryLevel: batteryLevelRef.current,
+        isPluggedIn: false,
+        powerMode: sys.powerMode,
+        brightness: sys.brightness,
+        bluetooth: sys.bluetooth,
+        isOnline: isOnlineRef.current,
+        overclockEnabled: sys.overclockEnabled,
+        openWindowCount: 2,
+        step: stepRef.current,
+      });
+
+      setBatteryLevel((prev) => {
+        const next = Math.max(0, Number((prev - telemetry.drainPerTick).toFixed(1)));
+        if (next <= sys.lowBatteryThreshold && next > 0 && !lowBatteryWarnedRef.current) {
+          lowBatteryWarnedRef.current = true;
+          soundEngine.playNotification();
+          notify(`低电量告警：剩余电量 ${Math.round(next)}%，请连接电源或切换省电模式`, 'warning');
+        }
+        if (next <= 0) {
+          window.setTimeout(() => {
+            if (isEndedOrStory(phaseRef.current)) return;
+            if (stepRef.current >= 1 && !privacyRef.current.firewallEnabled) {
+              triggerEnding(41);
+            } else {
+              triggerEnding(1);
+            }
+          }, 260);
+        }
+        return next;
+      });
+    }, 2800);
+    return () => window.clearInterval(timer);
+  }, [notify, triggerEnding]);
+
+  // Passive anomalous disk growth & #43 (磁盘爆满) monitor
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (
+        (phaseRef.current === 'PLAYING' || phaseRef.current === 'INVASION') &&
+        stepRef.current >= 1 &&
+        !privacyRef.current.antivirusEnabled &&
+        !suspendedDaemonRef.current
+      ) {
+        const delta = stepRef.current >= 2 ? 1.8 : 0.7;
+        setAnomalyStorageGb((prev) => Number((prev + delta).toFixed(1)));
+      }
+    }, 3400);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (phase !== 'PLAYING' && phase !== 'INVASION') {
+      diskWarnedRef.current = false;
+      return;
+    }
+    if (storageSnapshot.usedPercent >= 100) {
+      notify('磁盘可用空间已降至 0.0 GB，未知镜像文件正在锁死系统……', 'error');
+      const t = window.setTimeout(() => {
+        if (!isEndedOrStory(phaseRef.current)) {
+          triggerEnding(43);
+        }
+      }, 480);
+      return () => window.clearTimeout(t);
+    } else if (storageSnapshot.usedPercent >= 90 && !diskWarnedRef.current) {
+      diskWarnedRef.current = true;
+      notify(
+        `存储告警：磁盘空间已占用 ${storageSnapshot.usedPercent}%（剩余 ${storageSnapshot.freeGb.toFixed(1)} GB）`,
+        'warning'
+      );
+    } else if (storageSnapshot.usedPercent < 82) {
+      diskWarnedRef.current = false;
+    }
+  }, [phase, storageSnapshot.usedPercent, storageSnapshot.freeGb, notify, triggerEnding]);
 
   // Monitor 06:00 Dawn trigger (#26 晨光破晓) reliably whenever clock hits 06:00
   useEffect(() => {
@@ -1155,9 +1356,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const nextVal = !privacy[key];
       setPrivacy((prev) => ({ ...prev, [key]: nextVal }));
       const labels: Record<keyof PrivacySettings, string> = {
-        firewallEnabled: 'Windows 防火墙',
+        firewallEnabled: '网络防火墙',
         privacyEnabled: '隐私保护模式',
-        antivirusEnabled: '实时病毒防护',
+        antivirusEnabled: '实时恶意进程防护',
         dnsEnabled: 'DNS 加密',
       };
       notify(`${labels[key]}已${nextVal ? '开启' : '关闭'}`, nextVal ? 'success' : 'warning');
@@ -1179,13 +1380,42 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [privacy, sanity, toggleCount, phase, notify, triggerEnding]
   );
 
-  const updateSystem = useCallback((patch: Partial<SystemSettings>) => {
-    setSystem((prev) => ({ ...prev, ...patch }));
-  }, []);
+  const updateSystem = useCallback(
+    (patch: Partial<SystemSettings>) => {
+      setSystem((prev) => ({ ...prev, ...patch }));
+      if (patch.autoTimeSync === true) {
+        setClockOffsetMinutes(0);
+        setClockWarpCount(0);
+        morningWarnedRef.current = false;
+        notify('已恢复自动网络校时，时间锚点已重新同步', 'info');
+      }
+    },
+    [notify]
+  );
 
   const updateUser = useCallback((patch: Partial<UserProfile>) => {
     setUser((prev) => ({ ...prev, ...patch }));
   }, []);
+
+  const recordClockWarp = useCallback(() => {
+    if (systemRef.current.autoTimeSync || isEndedOrStory(phaseRef.current)) return;
+    setClockWarpCount((prev) => {
+      const next = prev + 1;
+      if (next === 3) {
+        notify('警告：连续手动篡改系统时钟正在撕裂本地时间锚点…… (3/5)', 'warning');
+      } else if (next === 4) {
+        notify('临界告警：时间线时间戳开始出现倒流错乱！ (4/5)', 'error');
+      } else if (next >= 5) {
+        soundEngine.playError();
+        window.setTimeout(() => {
+          if (!isEndedOrStory(phaseRef.current)) {
+            triggerEnding(48);
+          }
+        }, 420);
+      }
+      return next;
+    });
+  }, [notify, triggerEnding]);
 
   const setClockToMidnight = useCallback(() => {
     const real = new Date();
@@ -1197,7 +1427,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setClockOffsetMinutes(Math.round((target.getTime() - real.getTime()) / 60000));
     soundEngine.playNotification();
     notify('系统时间已调整至 00:00', 'info');
-  }, [notify]);
+    recordClockWarp();
+  }, [notify, recordClockWarp]);
 
   // #26 晨光破晓
   const setClockToMorning = useCallback(() => {
@@ -1211,20 +1442,23 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setClockOffsetMinutes(Math.round((target.getTime() - real.getTime()) / 60000));
     soundEngine.playNotification();
     notify('系统时间已调整至清晨 06:00', 'info');
-  }, [notify]);
+    recordClockWarp();
+  }, [notify, recordClockWarp]);
 
   const advanceClockMinutes = useCallback(
     (delta: number) => {
       morningWarnedRef.current = false;
       setClockOffsetMinutes((prev) => prev + delta);
       soundEngine.playClick();
+      recordClockWarp();
     },
-    []
+    [recordClockWarp]
   );
 
   const resetClock = useCallback(() => {
     morningWarnedRef.current = false;
     setClockOffsetMinutes(0);
+    setClockWarpCount(0);
     soundEngine.playClick();
     notify('系统时间已与网络同步', 'info');
   }, [notify]);
@@ -1805,6 +2039,34 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const escalateToInvasion = useCallback(
     (instanceId?: string) => {
       if (isEndedOrStory(phaseRef.current)) return;
+
+      const sealedPrediction = predictionTextRef.current.trim();
+      const matchesProphecy =
+        sealedPrediction.length > 0 && /入侵|伪人|0x000000/.test(sealedPrediction);
+
+      // #17 预知未来：在理智归零或常规入侵分流前优先判定，防止被 #7/#8 抢占
+      if (matchesProphecy) {
+        setStep(2);
+        setPhase('INVASION');
+        setSanity((prev) => Math.max(1, prev - 25));
+        setDesktopShake(true);
+        window.setTimeout(() => setDesktopShake(false), 450);
+        soundEngine.playError();
+        appendNote(
+          `警报：进程 0x000000 侵入端口的瞬间，你提前封存的预言「${sealedPrediction}」骤然应验，强行覆写了时间线！`,
+          'clue'
+        );
+        notify('你写下的因果预言正在实时重写现实……', 'warning');
+        if (prophecyTimerRef.current) {
+          window.clearTimeout(prophecyTimerRef.current);
+        }
+        prophecyTimerRef.current = window.setTimeout(() => {
+          prophecyTimerRef.current = null;
+          triggerEnding(17);
+        }, 700);
+        return;
+      }
+
       const nextSanity = Math.max(0, sanityRef.current - 25);
       setStep(2);
       setPhase('INVASION');
@@ -1813,13 +2075,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       window.setTimeout(() => setDesktopShake(false), 450);
       soundEngine.playError();
       appendNote('警报：伪人程序已经顺着暗网连接侵入桌面，屏幕出现异常频闪！', 'warning');
-
-      // #17 预知未来
-      if (predictionText && (predictionText.includes('入侵') || predictionText.includes('伪人'))) {
-        notify('你写下的因果预言正在实时重写现实……', 'warning');
-        window.setTimeout(() => triggerEnding(17), 700);
-        return;
-      }
 
       // #2 断网避难
       if (!isOnlineRef.current) {
@@ -1855,7 +2110,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         openApp('browser');
       }
     },
-    [predictionText, triggerEnding, appendNote, notify, pushBrowserHistory, openApp]
+    [triggerEnding, appendNote, notify, pushBrowserHistory, openApp]
   );
 
   const applyForJob = useCallback(
@@ -1992,6 +2247,15 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (installedApps.includes(id) || downloadingApps[id] !== undefined) return;
 
       const meta = STORE_CATALOG.find((item) => item.id === id);
+      if (meta && storageSnapshot.freeGb < meta.sizeGb) {
+        soundEngine.playError();
+        notify(
+          `存储空间不足：安装「${meta.desktopName}」需 ${meta.sizeGb.toFixed(1)} GB，当前仅剩 ${storageSnapshot.freeGb.toFixed(1)} GB`,
+          'error'
+        );
+        return;
+      }
+
       soundEngine.playClick();
       setDownloadingApps((prev) => ({ ...prev, [id]: 12 }));
 
@@ -2022,7 +2286,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }, 1220);
       storeTimersRef.current.push(done);
     },
-    [isOnline, installedApps, downloadingApps, notify, appendNote]
+    [isOnline, installedApps, downloadingApps, storageSnapshot.freeGb, notify, appendNote]
   );
 
   const uninstallStoreApp = useCallback(
@@ -2208,13 +2472,13 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const triggerStoreGeekNight = useCallback(() => {
     if (isEndedOrStory(phaseRef.current)) return;
-    if (step === 0 && !jobApplied && installedApps.length === 4 && openedStoreApps.length === 4) {
+    if (step === 0 && !jobApplied && installedApps.length >= 4 && openedStoreApps.length >= 4) {
       triggerEnding(36);
       return;
     }
     soundEngine.playError();
     notify(
-      `需保持未应聘状态 (step=0)，并从商店安装且打开全部 4 款应用（当前已安装 ${installedApps.length}/4 · 已体验 ${openedStoreApps.length}/4）`,
+      `需保持未应聘状态 (step=0)，并从商店安装且打开至少 4 款应用（当前已安装 ${installedApps.length}/6 · 已体验 ${openedStoreApps.length}/6）`,
       'warning'
     );
   }, [step, jobApplied, installedApps.length, openedStoreApps.length, triggerEnding, notify]);
@@ -2319,6 +2583,285 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     triggerEnding(40);
   }, [suspendedDaemon, privacy.firewallEnabled, privacy.antivirusEnabled, notify, triggerEnding]);
 
+  // === Power, Storage, Advanced Settings, Cleaner, Sniffer & Terminal Expansion (#41 - #50) ===
+  const updateStoreApp = useCallback(
+    (id: StoreAppId) => {
+      if (isEndedOrStory(phaseRef.current)) return;
+      if (!isOnline) {
+        soundEngine.playError();
+        notify('当前处于离线状态，无法拉取应用安全补丁', 'warning');
+        return;
+      }
+      if (!installedApps.includes(id)) {
+        notify('请先安装该应用', 'warning');
+        return;
+      }
+      if (updatedStoreApps.includes(id)) {
+        notify('该应用已是最新安全补丁版本', 'info');
+        return;
+      }
+      const meta = STORE_CATALOG.find((item) => item.id === id);
+      setUpdatedStoreApps((prev) => [...prev, id]);
+      soundEngine.playSuccess();
+      notify(`已为「${meta?.desktopName ?? id}」安装热补丁 v${meta?.updateVersion ?? 'latest'}`, 'success');
+      appendNote(`升级了应用「${meta?.desktopName ?? id}」至 v${meta?.updateVersion ?? 'latest'}。`, 'clue');
+    },
+    [isOnline, installedApps, updatedStoreApps, notify, appendNote]
+  );
+
+  const togglePowerPlug = useCallback(() => {
+    soundEngine.playClick();
+    setIsPluggedIn((prev) => {
+      const next = !prev;
+      notify(next ? '已接入外部电源适配器（开始稳压充电）' : '已拔除外部电源，当前由内置电池供电', next ? 'success' : 'warning');
+      return next;
+    });
+  }, [notify]);
+
+  const drainBatteryManual = useCallback(
+    (amount = 22) => {
+      if (isEndedOrStory(phaseRef.current)) return;
+      if (isPluggedInRef.current) {
+        soundEngine.playError();
+        notify('当前已接入外接电源，请先拔掉电源后再测试电池消耗', 'warning');
+        return;
+      }
+      soundEngine.playClick();
+      setBatteryLevel((prev) => {
+        const next = Math.max(0, Number((prev - amount).toFixed(1)));
+        if (next <= 0) {
+          window.setTimeout(() => {
+            if (isEndedOrStory(phaseRef.current)) return;
+            if (stepRef.current >= 1 && !privacyRef.current.firewallEnabled) {
+              triggerEnding(41);
+            } else {
+              triggerEnding(1);
+            }
+          }, 280);
+        } else {
+          notify(`高负载运行消耗电量，当前剩余 ${Math.round(next)}%`, 'info');
+        }
+        return next;
+      });
+    },
+    [notify, triggerEnding]
+  );
+
+  const triggerLowPowerStealthEnding = useCallback(() => {
+    if (isEndedOrStory(phaseRef.current)) return;
+    if (isPluggedIn) {
+      notify('必须先拔掉外部电源，才能进入零功耗静默隐匿', 'warning');
+      return;
+    }
+    if (system.powerMode !== 'saver' || system.brightness > 50) {
+      notify('请先切换至「极致省电模式」并将屏幕亮度调至 50% 以下', 'warning');
+      return;
+    }
+    if (isOnline && (!privacy.firewallEnabled || !privacy.privacyEnabled)) {
+      notify('请先断开网络，或开启「防火墙 + 隐私保护」彻底屏蔽定位信标', 'warning');
+      return;
+    }
+    if (batteryLevel > 35 || batteryLevel <= 0) {
+      notify(`需将剩余电量控制在 1%~35% 区间（当前 ${Math.round(batteryLevel)}%）`, 'warning');
+      return;
+    }
+    soundEngine.playSuccess();
+    triggerEnding(42);
+  }, [isPluggedIn, system.powerMode, system.brightness, isOnline, privacy.firewallEnabled, privacy.privacyEnabled, batteryLevel, notify, triggerEnding]);
+
+  const triggerOverclockMeltdown = useCallback(
+    (forcedByCli = false) => {
+      if (isEndedOrStory(phaseRef.current)) return;
+      if (!system.overclockEnabled) {
+        soundEngine.playError();
+        notify('需先在「系统设置 → 高级与开发者」开启实验性硬件超频限制解锁', 'warning');
+        return;
+      }
+      if (!forcedByCli) {
+        if (!isPluggedIn || system.powerMode !== 'performance' || system.brightness < 95) {
+          soundEngine.playError();
+          notify('极限压测条件不足：需接通电源、开启「高性能模式」并将屏幕亮度拉至 ≥ 95%', 'warning');
+          return;
+        }
+      }
+      setDesktopShake(true);
+      soundEngine.playError();
+      window.setTimeout(() => setDesktopShake(false), 450);
+      triggerEnding(45);
+    },
+    [system.overclockEnabled, system.powerMode, system.brightness, isPluggedIn, notify, triggerEnding]
+  );
+
+  const cleanTempCache = useCallback(() => {
+    if (tempCacheGb <= 0.05) {
+      notify('临时缓存已清空（0.0 GB）', 'info');
+      return;
+    }
+    const cleared = tempCacheGb;
+    setTempCacheGb(0);
+    soundEngine.playSuccess();
+    notify(`已清理临时系统与浏览器缓存 ${cleared.toFixed(1)} GB`, 'success');
+  }, [tempCacheGb, notify]);
+
+  const purgeAnomalyStorage = useCallback(() => {
+    if (!privacy.antivirusEnabled) {
+      soundEngine.playError();
+      setSanity((prev) => Math.max(0, prev - 5));
+      setAnomalyStorageGb((prev) => Number((prev + 2.4).toFixed(1)));
+      notify('反噬警告：未开启「实时恶意进程防护」强行粉碎扇区触发再生拷贝（异常 +2.4 GB，理智 -5%）', 'error');
+      return;
+    }
+    if (anomalyStorageGb <= 0.05) {
+      notify('当前无异常隐藏扇区占用（0.0 GB）', 'info');
+      return;
+    }
+    const purged = anomalyStorageGb;
+    setAnomalyStorageGb(0);
+    soundEngine.playSuccess();
+    notify(`已彻底零字节粉碎隐藏异常扇区 ${purged.toFixed(1)} GB！`, 'success');
+    appendNote(`在杀毒防护锁死下粉碎了 ${purged.toFixed(1)} GB 隐藏异常扇区。`, 'clue');
+  }, [privacy.antivirusEnabled, anomalyStorageGb, notify, appendNote]);
+
+  const triggerStorageZeroEnding = useCallback(() => {
+    if (isEndedOrStory(phaseRef.current)) return;
+    if (!privacy.antivirusEnabled) {
+      notify('需先开启「实时恶意进程防护」防止异常扇区再生', 'warning');
+      return;
+    }
+    if (tempCacheGb > 0.05 || anomalyStorageGb > 0.05) {
+      notify('请先将临时缓存与异常隐藏扇区全部清理至 0.0 GB', 'warning');
+      return;
+    }
+    soundEngine.playSuccess();
+    triggerEnding(44);
+  }, [privacy.antivirusEnabled, tempCacheGb, anomalyStorageGb, notify, triggerEnding]);
+
+  const floodStorageDump = useCallback(
+    (amountGb = 18) => {
+      if (isEndedOrStory(phaseRef.current)) return;
+      soundEngine.playError();
+      setAnomalyStorageGb((prev) => Number((prev + amountGb).toFixed(1)));
+      notify(`警告：镜像转储写入异常分区 +${amountGb.toFixed(1)} GB`, 'warning');
+    },
+    [notify]
+  );
+
+  const triggerUsbHijack = useCallback(() => {
+    if (isEndedOrStory(phaseRef.current)) return;
+    if (!system.usbDebugging) {
+      notify('请先在设置开启「USB 调试 / ADB 监听」', 'warning');
+      return;
+    }
+    if (privacy.privacyEnabled) {
+      soundEngine.playSuccess();
+      notify('硬件隐私权限锁已拦截未知 ADB 调试握手请求！', 'success');
+      appendNote('硬件隐私保护成功阻断了外部 ADB 调试端口劫持。', 'clue');
+      return;
+    }
+    if (!isOnline || step < 1) {
+      notify('当前暂无外部调试握手信号（需处于联网且已进入调查/异常阶段 step ≥ 1）', 'info');
+      return;
+    }
+    soundEngine.playError();
+    notify('未知主机正在通过 ADB 端口注入内核指令……', 'error');
+    window.setTimeout(() => {
+      if (!isEndedOrStory(phaseRef.current)) {
+        triggerEnding(46);
+      }
+    }, 520);
+  }, [system.usbDebugging, privacy.privacyEnabled, isOnline, step, notify, appendNote, triggerEnding]);
+
+  const captureSnifferPacket = useCallback(
+    (beaconId: string) => {
+      if (!isOnline) {
+        soundEngine.playError();
+        notify('当前处于离线状态，网卡未捕获到外部信标流', 'warning');
+        return;
+      }
+      if (capturedPackets.includes(beaconId)) return;
+      setCapturedPackets((prev) => [...prev, beaconId]);
+      soundEngine.playNotification();
+      notify(`已捕获加密异常信标 [${beaconId}]`, 'info');
+    },
+    [isOnline, capturedPackets, notify]
+  );
+
+  const traceAndSeverC2 = useCallback(() => {
+    if (isEndedOrStory(phaseRef.current)) return;
+    if (!isOnline || step < 1) {
+      notify('需在联网且处于调查/异常阶段（step ≥ 1）时溯源活跃信标', 'warning');
+      return;
+    }
+    if (capturedPackets.length < 3) {
+      notify(`需先在嗅探仪捕获全部 3 条加密信标包（当前 ${capturedPackets.length}/3）`, 'warning');
+      return;
+    }
+    if (!privacy.firewallEnabled || !privacy.dnsEnabled) {
+      notify('请先开启「防火墙」与「DNS 加密」后再签发全栈 C2 封锁路由', 'warning');
+      return;
+    }
+    soundEngine.playSuccess();
+    triggerEnding(47);
+  }, [isOnline, step, capturedPackets.length, privacy.firewallEnabled, privacy.dnsEnabled, notify, triggerEnding]);
+
+  const recordTerminalCommand = useCallback((cmd: string) => {
+    const clean = cmd.trim().toLowerCase();
+    if (!clean) return;
+    setTerminalCommandsUsed((prev) => (prev.includes(clean) ? prev : [...prev, clean]));
+  }, []);
+
+  const runTerminalDaemonAudit = useCallback(() => {
+    if (isEndedOrStory(phaseRef.current)) return;
+    if (terminalCommandsUsed.length < 5) {
+      soundEngine.playError();
+      notify(`需先在终端累计运行至少 5 种不同诊断指令（当前 ${terminalCommandsUsed.length}/5）`, 'warning');
+      return;
+    }
+    if (!privacy.firewallEnabled || !privacy.antivirusEnabled) {
+      soundEngine.playError();
+      notify('需先开启「防火墙」与「实时病毒防护」才能签发内核级守护审计脚本', 'warning');
+      return;
+    }
+    soundEngine.playSuccess();
+    triggerEnding(49);
+  }, [terminalCommandsUsed.length, privacy.firewallEnabled, privacy.antivirusEnabled, notify, triggerEnding]);
+
+  const triggerSystemArchitectEnding = useCallback(() => {
+    if (isEndedOrStory(phaseRef.current)) return;
+    const allInstalled = STORE_APP_IDS.every((id) => installedApps.includes(id));
+    const allOpened = STORE_APP_IDS.every((id) => openedStoreApps.includes(id));
+    const allShields =
+      privacy.firewallEnabled &&
+      privacy.privacyEnabled &&
+      privacy.antivirusEnabled &&
+      privacy.dnsEnabled;
+    if (
+      allInstalled &&
+      allOpened &&
+      updatedStoreApps.length >= 1 &&
+      anomalyStorageGb <= 0.05 &&
+      batteryLevel >= 50 &&
+      allShields &&
+      sanity >= 80
+    ) {
+      soundEngine.playSuccess();
+      triggerEnding(50);
+      return;
+    }
+    soundEngine.playError();
+    notify('终极架构师认证尚未满足全部条件：请查看商店顶部认证清单逐项完成', 'warning');
+  }, [
+    installedApps,
+    openedStoreApps,
+    updatedStoreApps.length,
+    anomalyStorageGb,
+    batteryLevel,
+    privacy,
+    sanity,
+    notify,
+    triggerEnding,
+  ]);
+
   const markEmailRead = useCallback((emailId: string) => {
     setReadEmailIds((prev) => (prev.includes(emailId) ? prev : [...prev, emailId]));
   }, []);
@@ -2367,10 +2910,23 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         notify('请先输入文字内容', 'warning');
         return;
       }
+      if (stepRef.current >= 2 || phaseRef.current === 'INVASION') {
+        soundEngine.playError();
+        appendNote(`迟到的随笔：「${trimmed}」（入侵已先一步发生）`, 'warning');
+        notify('入侵已爆发，预言需在入侵发生前（尚未深入后台时）封存才会改写因果', 'warning');
+        return;
+      }
+      predictionTextRef.current = trimmed;
       setPredictionText(trimmed);
-      soundEngine.playSuccess();
-      appendNote(`已铭刻预言：「${trimmed}」`, 'clue');
-      notify('预言已写入本地缓冲区', 'success');
+      if (/入侵|伪人|0x000000/.test(trimmed)) {
+        soundEngine.playSuccess();
+        appendNote(`已激活因果预言：「${trimmed}」（等待危机爆发时应验）`, 'clue');
+        notify('因果预言已铭刻激活！去应聘高薪工作并点击「深入对方后台服务器」触发入侵即可应验', 'success');
+      } else {
+        soundEngine.playNotification();
+        appendNote(`已封存随笔：「${trimmed}」`, 'user');
+        notify('随笔已封存（提示：若想触发因果律共鸣，内容需包含「入侵」或「伪人」）', 'info');
+      }
     },
     [notify, appendNote]
   );
@@ -2381,8 +2937,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!trimmed) return;
       appendNote(trimmed, 'user');
       soundEngine.playClick();
+      if (stepRef.current < 2 && !predictionTextRef.current && /入侵|伪人|0x000000/.test(trimmed)) {
+        notify('提示：如需铭刻因果预言（结局 #17），请在上方「深夜随笔 / 预感铭刻」框点击「封存预感」', 'info');
+      }
     },
-    [appendNote]
+    [appendNote, notify]
   );
 
   // Rest tonight -> #3 平凡的夜
@@ -2564,6 +3123,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       crashTimerRef.current = null;
     }
     ramWarnedRef.current = false;
+    lowBatteryWarnedRef.current = false;
+    diskWarnedRef.current = false;
     storeTimersRef.current.forEach((t) => window.clearTimeout(t));
     storeTimersRef.current = [];
     soundEngine.stopRadioChannel();
@@ -2575,7 +3136,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentEndingId(null);
     setPrivacy(DEFAULT_PRIVACY);
     setClockOffsetMinutes(0);
+    setClockWarpCount(0);
     morningWarnedRef.current = false;
+    setBatteryLevel(78);
+    setIsPluggedIn(true);
+    setTempCacheGb(4.6);
+    setAnomalyStorageGb(1.8);
     setBluetoothDevices(INITIAL_BLUETOOTH_DEVICES);
     setBluetoothScanning(false);
     setDecodedMorseIds([]);
@@ -2588,6 +3154,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setMirrorInspectCount(0);
     setCasualChatCount(0);
     setMirrorLogRead(false);
+    if (prophecyTimerRef.current) {
+      window.clearTimeout(prophecyTimerRef.current);
+      prophecyTimerRef.current = null;
+    }
+    predictionTextRef.current = '';
     setPredictionText('');
     setNotepadEntries([
       {
@@ -2607,6 +3178,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setNewsChoice('none');
     setChatMessages(INITIAL_CHAT_MESSAGES);
     setChatSequenceStarted(false);
+    setDesktopShake(false);
     setActiveAnomaly(null);
     setInvasionLocked(false);
     setDownloads([]);
@@ -2614,6 +3186,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setInstalledApps([]);
     setDownloadingApps({});
     setOpenedStoreApps([]);
+    setUpdatedStoreApps([]);
+    setCapturedPackets([]);
+    setTerminalCommandsUsed([]);
     setSuspendedDaemon(false);
     setVscodePatches([false, false, false]);
     setVscodeGodMode(false);
@@ -2726,9 +3301,19 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     bluetoothScanning,
     decodedMorseIds,
     systemMetrics,
+    batteryLevel,
+    isPluggedIn,
+    batteryTelemetry,
+    tempCacheGb,
+    anomalyStorageGb,
+    storageSnapshot,
+    clockWarpCount,
     installedApps,
     downloadingApps,
     openedStoreApps,
+    updatedStoreApps,
+    capturedPackets,
+    terminalCommandsUsed,
     suspendedDaemon,
     vscodePatches,
     vscodeGodMode,
@@ -2803,6 +3388,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     triggerOmegaEnding,
     installStoreApp,
     uninstallStoreApp,
+    updateStoreApp,
     toggleVscodePatch,
     setVscodeGodMode,
     toggleVscodeCorruptExt,
@@ -2821,6 +3407,20 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     sendMorseCounterPulse,
     transmitMorseCode,
     auditAndTerminateDaemon,
+    togglePowerPlug,
+    drainBatteryManual,
+    triggerLowPowerStealthEnding,
+    triggerOverclockMeltdown,
+    cleanTempCache,
+    purgeAnomalyStorage,
+    triggerStorageZeroEnding,
+    floodStorageDump,
+    triggerUsbHijack,
+    captureSnifferPacket,
+    traceAndSeverC2,
+    recordTerminalCommand,
+    runTerminalDaemonAudit,
+    triggerSystemArchitectEnding,
     markEmailRead,
     joinVideoInterview,
     decryptTruthDossier,

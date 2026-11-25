@@ -132,7 +132,7 @@ export const MonitorApp: React.FC = () => {
           <div className="flex items-center justify-between text-xs">
             <span className="font-semibold flex items-center gap-1.5">
               <Cpu className="w-4 h-4 text-sky-400" />
-              <span>处理器占用 (i3-4130)</span>
+              <span>{isMobile ? '处理器占用 (A13 移动芯片)' : '处理器占用 (i3-4130)'}</span>
             </span>
             <span className="font-mono-tabular font-bold text-sky-400">{currentCpu}%</span>
           </div>
@@ -143,7 +143,9 @@ export const MonitorApp: React.FC = () => {
           <div className="flex items-center justify-between text-xs">
             <span className="font-semibold flex items-center gap-1.5">
               <HardDrive className="w-4 h-4 text-emerald-400" />
-              <span>物理内存 ({latestMetrics.totalUsedGb.toFixed(2)} / 4.00 GB)</span>
+              <span>
+                {isMobile ? '运行内存' : '物理内存'} ({latestMetrics.totalUsedGb.toFixed(2)} / 4.00 GB)
+              </span>
             </span>
             <span
               className={`font-mono-tabular font-bold ${
@@ -194,7 +196,9 @@ export const MonitorApp: React.FC = () => {
                 <span className="text-[11px] font-normal text-sky-400">PID 0104 · 内核保护</span>
               </div>
               <div className={`text-[11px] mt-0.5 ${mutedText}`}>
-                维持虚拟桌面边界与内存隔离，禁止强行终止。
+                {isMobile
+                  ? '维持 iOS 沙箱边界与内存隔离，禁止强行终止。'
+                  : '维持虚拟桌面边界与内存隔离，禁止强行终止。'}
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -272,7 +276,9 @@ export const MonitorApp: React.FC = () => {
                   doppelganger_daemon.exe · PID 0000 · 高危覆写
                 </div>
                 <div className={`text-[11px] mt-0.5 ${mutedText}`}>
-                  无法直接从任务管理器结束，需通过「安全中心」「终端」或「VS Code 源码热更新」根除。
+                  {isMobile
+                    ? '无法直接从性能监视结束，需通过「设备安全」「终端」或「VS Code Mobile 热更新」根除。'
+                    : '无法直接从任务管理器结束，需通过「安全中心」「终端」或「VS Code 源码热更新」根除。'}
                 </div>
               </div>
               <span className="text-xs font-mono-tabular text-rose-400 shrink-0">拒绝访问</span>
